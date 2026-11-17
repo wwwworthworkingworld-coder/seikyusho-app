@@ -134,7 +134,7 @@ input[type=search]{margin-bottom:12px}
 .sm-scale{transform-origin:0 0;margin:12px auto;box-shadow:0 2px 14px rgba(0,0,0,.3)}
 .sm-foot{flex:none;padding:10px 16px calc(env(safe-area-inset-bottom) + 10px);background:var(--card);border-top:1px solid var(--line);display:grid;gap:10px}
 .sm-foot .note{margin:0}
-.pay{align-items:flex-end;background:rgba(0,0,0,.45)}
+.pay{justify-content:flex-end;background:rgba(0,0,0,.45)}
 .pay-box{width:100%;background:var(--card);border-radius:18px 18px 0 0;padding:20px 16px calc(env(safe-area-inset-bottom) + 16px);display:grid;gap:10px}
 .pay-box h2{margin:0;font-size:19px}
 .pay-box .bullets{margin:0 0 4px}
