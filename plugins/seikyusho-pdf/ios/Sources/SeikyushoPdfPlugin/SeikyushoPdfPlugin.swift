@@ -13,7 +13,7 @@ public class SeikyushoPdfPlugin: CAPPlugin, CAPBridgedPlugin, WKNavigationDelega
     public let pluginMethods: [CAPPluginMethod] = [
         CAPPluginMethod(name: "makePdf", returnType: CAPPluginReturnPromise)
     ]
-    private var webView: WKWebView?
+    private var pdfWebView: WKWebView?
     private var pending: CAPPluginCall?
     private var fileName = "document.pdf"
     private let pageSize = CGSize(width: 595.2, height: 841.8)
@@ -39,7 +39,7 @@ public class SeikyushoPdfPlugin: CAPPlugin, CAPBridgedPlugin, WKNavigationDelega
             wv.alpha = 0
             wv.isUserInteractionEnabled = false
             self.bridge?.viewController?.view.addSubview(wv)
-            self.webView = wv
+            self.pdfWebView = wv
             wv.loadHTMLString(html, baseURL: nil)
         }
     }
@@ -60,7 +60,7 @@ public class SeikyushoPdfPlugin: CAPPlugin, CAPBridgedPlugin, WKNavigationDelega
     }
 
     private func render() {
-        guard let wv = webView else { finish(error: "画面がありません"); return }
+        guard let wv = pdfWebView else { finish(error: "画面がありません"); return }
         let renderer = UIPrintPageRenderer()
         renderer.addPrintFormatter(wv.viewPrintFormatter(), startingAtPageAt: 0)
         let paper = CGRect(origin: .zero, size: pageSize)
@@ -91,9 +91,9 @@ public class SeikyushoPdfPlugin: CAPPlugin, CAPBridgedPlugin, WKNavigationDelega
     private func finish(path: String? = nil, pages: Int = 0, error: String? = nil) {
         let call = pending
         pending = nil
-        webView?.navigationDelegate = nil
-        webView?.removeFromSuperview()
-        webView = nil
+        pdfWebView?.navigationDelegate = nil
+        pdfWebView?.removeFromSuperview()
+        pdfWebView = nil
         if let e = error { call?.reject(e) } else { call?.resolve(["path": path ?? "", "uri": "file://" + (path ?? ""), "pages": pages]) }
     }
 }
