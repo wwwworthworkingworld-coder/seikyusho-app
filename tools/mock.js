@@ -38,6 +38,7 @@
       s.textContent = ".bar{padding-top:62px!important}.tabs{padding-bottom:30px!important}.sm-bar{padding-top:62px!important}.sm-foot{padding-bottom:40px!important}";
       document.head.appendChild(s);
       if (q.get("open")) setTimeout(() => { const li = document.querySelector(".doclist li"); if (li) li.click(); if (q.get("open") === "preview") setTimeout(() => document.getElementById("previewBtn").click(), 300); }, 400);
+      if (q.get("pay") !== null) setTimeout(() => document.getElementById("createBtn").click(), 500);
     });
   }
 })();

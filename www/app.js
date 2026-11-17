@@ -4,7 +4,7 @@
   const PRODUCT_ID = "com.company256.seikyusho.pro";
   const PRIVACY_URL = "https://256company.com/seikyusho-app-privacy.html";
   const SUPPORT_URL = "https://256company.com/seikyusho-app-support.html";
-  const REVIEW_URL = "https://apps.apple.com/jp/app/id0000000000?action=write-review";   // 公開後に App ID を入れる
+  const REVIEW_URL = "https://apps.apple.com/jp/app/id6835948237?action=write-review";
   const native = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
   const P = native ? window.Capacitor.Plugins : {};
   const store = () => window.SeikyushoStoreMock || P.SeikyushoStore;
