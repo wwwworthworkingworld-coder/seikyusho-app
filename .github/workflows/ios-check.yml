@@ -42,7 +42,8 @@ jobs:
           xcrun simctl install "$UDID" "$APP"
           grep -c SeikyushoPdfPlugin "$APP/capacitor.config.json" || true
           (xcrun simctl launch --console-pty "$UDID" com.company256.seikyusho > app_console.txt 2>&1 &)
-          sleep 30
+          # 起動が遅い runner でも PDF 作成の結果（CI_PDF_OK／FAIL）が出るまで最長 120 秒待つ
+          for i in $(seq 1 24); do sleep 5; grep -q "CI_PDF_" app_console.txt && break; done
           xcrun simctl io "$UDID" screenshot screen_docs.png
           cat app_console.txt
           ! grep -E "\[error\]|ERROR MESSAGE" app_console.txt
