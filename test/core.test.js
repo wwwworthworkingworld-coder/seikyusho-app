@@ -192,7 +192,7 @@ t("書類の HTML：印影・ロゴ・色が反映され、HTML の特殊文字�
 t("書類の HTML を PDF 用の 1 ページ文書に包む（A4・余白・フォント）", () => {
   const full = P.pdfDocument(P.paperHtml(DOC, ME, {}));
   assert.ok(full.startsWith("<!doctype html>")); assert.ok(full.includes("210mm")); assert.ok(full.includes("Hiragino"));
-  assert.ok(/@page\s*\{[^}]*A4/.test(full));
+  assert.ok(/@page\s*\{[^}]*A4/.test(full)); assert.ok(full.includes("min-height:0"), "PDF では用紙いっぱいの高さ指定を外す（空白ページを防ぐ）");
 });
 t("ファイル名：種類_番号_取引先.pdf、使えない文字は除く", () => {
   assert.strictEqual(P.pdfFileName(DOC), "請求書_I-2026-001_見本商事.pdf");

@@ -31,8 +31,8 @@
 .sheet .amount b{font-size:20pt;border-bottom:1.5pt solid #333;min-width:70mm;padding:0 2mm 0.5mm;text-align:right;font-variant-numeric:tabular-nums}
 .sheet .amount small{font-weight:400;font-size:9pt}
 .sheet table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:9.5pt}
-.sheet thead th{background:var(--c);color:#fff;padding:1.8mm 1.5mm;font-weight:700;text-align:center;border:0.3pt solid var(--c)}
-.sheet tbody td{border-bottom:0.3pt solid #c9d1dc;padding:1.8mm 1.5mm;vertical-align:top;word-break:break-all;overflow-wrap:anywhere}
+.sheet thead th{background:var(--c);color:#fff;padding:1.8mm 1.5mm;font-weight:700;text-align:center;border:0.4pt solid var(--c);-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.sheet tbody td{border-bottom:0.4pt solid #9aa5b5;padding:1.8mm 1.5mm;vertical-align:top;word-break:break-all;overflow-wrap:anywhere}
 .sheet tbody tr.blank td{height:7.2mm}
 .sheet td.n,.sheet th.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
 .sheet td.c{text-align:center}
@@ -124,7 +124,7 @@
   // PDF 用：1 つの HTML 文書に包む（iOS 側が WKWebView に読み込む）
   function pdfDocument(inner) {
     return `<!doctype html><html lang="ja"><head><meta charset="utf-8"><style>@page{size:A4;margin:0}html,body{margin:0;padding:0;background:#fff}${CSS}
-.sheet{page-break-after:always}.sheet:last-child{page-break-after:auto}thead{display:table-header-group}tr{page-break-inside:avoid}</style></head><body>${inner}</body></html>`;
+.sheet{min-height:0;page-break-after:always}.sheet:last-child{page-break-after:auto}thead{display:table-header-group}tr{page-break-inside:avoid}</style></head><body>${inner}</body></html>`;
   }
 
   const pdfFileName = doc => `${doc.kind || "書類"}_${String(doc.no || "").replace(/[\\/:*?"<>|\s]/g, "")}_${String(doc.to || "").replace(/[\\/:*?"<>|\s]/g, "").slice(0, 20)}.pdf`;
