@@ -1,0 +1,60 @@
+name: iOS check
+# Apple の登録がなくても動く確認：試験、ビルド、シミュレーターでの起動、PDF 作成
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: macos-26
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - name: 計算処理と書類の試験
+        run: node test/core.test.js
+      - name: 起動確認用の差し込み（架空のデータで PDF を作って console に結果を出す）
+        run: |
+          python3 - <<'PY'
+          import pathlib
+          pathlib.Path("www/mock_native.js").write_text(pathlib.Path("tools/mock_native.js").read_text(encoding="utf-8") + "\n" + pathlib.Path("tools/ci_pdf_check.js").read_text(encoding="utf-8"), encoding="utf-8")
+          p = pathlib.Path("www/index.html")
+          p.write_text(p.read_text(encoding="utf-8").replace('<script src="app.js">', '<script src="mock_native.js"></script>\n<script src="app.js">'), encoding="utf-8")
+          PY
+      - run: npx cap sync ios
+      - name: シミュレーター用にビルド
+        run: |
+          xcodebuild -version
+          xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Debug \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build CODE_SIGNING_ALLOWED=NO build | tail -30
+      - name: シミュレーターで起動して画面を撮り、PDF を作る
+        run: |
+          UDID=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; print([x['udid'] for k,v in d.items() if 'iOS' in k for x in v if x['name'].startswith('iPhone')][-1])")
+          xcrun simctl boot "$UDID"
+          xcrun simctl bootstatus "$UDID" -b
+          APP=$(find build/Build/Products -name 'App.app' -maxdepth 3 | head -1)
+          xcrun simctl install "$UDID" "$APP"
+          grep -c SeikyushoPdfPlugin "$APP/capacitor.config.json" || true
+          (xcrun simctl launch --console-pty "$UDID" com.company256.seikyusho > app_console.txt 2>&1 &)
+          sleep 30
+          xcrun simctl io "$UDID" screenshot screen_docs.png
+          cat app_console.txt
+          ! grep -E "\[error\]|ERROR MESSAGE" app_console.txt
+          grep -q "CI_PDF_OK" app_console.txt
+          PDF=$(xcrun simctl get_app_container "$UDID" com.company256.seikyusho data)/tmp/seikyusho-pdf
+          ls -la "$PDF"
+          cp "$PDF"/*.pdf ci_sample.pdf
+          python3 -c "import sys; b=open('ci_sample.pdf','rb').read(); print('PDF bytes', len(b)); assert b.startswith(b'%PDF'); print('pages', b.count(b'/Type /Page') - b.count(b'/Type /Pages'))"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ios-check
+          path: |
+            screen_docs.png
+            app_console.txt
+            ci_sample.pdf

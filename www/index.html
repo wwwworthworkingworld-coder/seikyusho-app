@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<title>請求書ラクラク</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div class="app">
+  <header class="bar"><h1 id="title">書類</h1><span class="bar-right" id="freeBadge" hidden></span></header>
+
+  <main id="scroll">
+    <!-- 書類（ホーム） -->
+    <section id="tab-docs" class="tab">
+      <p class="warn" id="backupWarn" hidden></p>
+      <div class="card hero" id="emptyDocs" hidden>
+        <h2>はじめての書類を作りましょう</h2>
+        <ul class="bullets">
+          <li>見積書・納品書・請求書・領収書を、iPhone だけで A4 の PDF に。</li>
+          <li>保存はこの iPhone の中だけ。会員登録も通信もありません。</li>
+          <li>「バックアップを書き出す」でファイルに残せるので、機種変更でも消えません。</li>
+        </ul>
+        <button class="primary" type="button" id="firstCreate">請求書を作ってみる</button>
+        <p class="note">先に「設定」で屋号・住所・振込先を入れておくと、書類に自動で入ります。</p>
+      </div>
+      <div id="docsBody">
+        <div class="chips filter" id="kindFilter"></div>
+        <input id="search" type="search" placeholder="取引先名・件名で探す" autocomplete="off">
+        <div id="docList"></div>
+      </div>
+    </section>
+
+    <!-- 作る（編集） -->
+    <section id="tab-edit" class="tab" hidden>
+      <div class="card form">
+        <div>
+          <label>種類</label>
+          <div class="chips" id="kindChips"></div>
+        </div>
+        <div>
+          <label for="to">取引先 <small>最近の取引先はタップで入ります</small></label>
+          <div class="chips" id="clientChips"></div>
+          <div class="row-to">
+            <input id="to" type="text" maxlength="40" placeholder="例：見本商事" autocomplete="off">
+            <select id="honor" aria-label="敬称"><option>御中</option><option>様</option></select>
+          </div>
+        </div>
+        <div class="row2">
+          <div><label for="date">発行日</label><input id="date" type="date"></div>
+          <div id="dueWrap"><label for="due" id="dueLabel">お支払期限</label><input id="due" type="date"></div>
+        </div>
+        <div><label for="no">番号 <small>自動で付きます。変えてもかまいません</small></label><input id="no" type="text" maxlength="20"></div>
+        <div><label for="subject" id="subjectLabel">件名 <small>任意</small></label><input id="subject" type="text" maxlength="60" placeholder="例：Webサイト制作"></div>
+      </div>
+
+      <div class="card form">
+        <label>品目</label>
+        <div class="chips" id="itemChips"></div>
+        <div id="lines"></div>
+        <div class="row2">
+          <button class="secondary" type="button" id="addLine">＋ 行を追加</button>
+          <button class="secondary" type="button" id="addDiscount">＋ 値引き</button>
+        </div>
+      </div>
+
+      <div class="card form">
+        <label class="switch"><span>源泉徴収税額を書く <small>相手が個人への報酬から差し引くとき（原稿料・デザイン料など）</small></span><input id="wh" type="checkbox"></label>
+        <div><label for="memo">備考 <small>任意</small></label><textarea id="memo" rows="2" maxlength="300" placeholder="例：いつもありがとうございます。"></textarea></div>
+      </div>
+
+      <div class="card actions" id="docActions">
+        <button class="secondary" type="button" id="convertBtn"></button>
+        <button class="secondary" type="button" id="paidBtn" hidden></button>
+        <button class="secondary" type="button" id="dupBtn">複製する</button>
+        <button class="secondary danger" type="button" id="deleteBtn">この書類を削除</button>
+      </div>
+      <div class="spacer"></div>
+    </section>
+
+    <!-- 設定 -->
+    <section id="tab-settings" class="tab" hidden>
+      <div class="card form">
+        <h2>自分の情報 <small>書類の右上に入ります</small></h2>
+        <div><label for="me_name">屋号・名前</label><input id="me_name" type="text" maxlength="40" placeholder="例：サンプル工房"></div>
+        <div><label for="me_addr">住所</label><textarea id="me_addr" rows="2" maxlength="120" placeholder="例：〒000-0000 東京都○○区○○ 1-2-3"></textarea></div>
+        <div class="row2">
+          <div><label for="me_tel">電話番号</label><input id="me_tel" type="tel" maxlength="20"></div>
+          <div><label for="me_mail">メール</label><input id="me_mail" type="email" maxlength="60"></div>
+        </div>
+        <div>
+          <label for="me_reg">インボイス登録番号 <small>T＋13桁。未登録なら空欄</small></label>
+          <input id="me_reg" type="text" maxlength="16" placeholder="T1234567890123" autocapitalize="characters">
+          <p class="note tight err" id="regErr" hidden>T＋13桁の形になっていません</p>
+        </div>
+        <div>
+          <label>消費税</label>
+          <div class="chips" id="taxChips"></div>
+          <p class="note tight">免税事業者を選ぶと、消費税の内訳と登録番号を書類に書きません。</p>
+        </div>
+        <div><label for="me_bank">振込先 <small>請求書に表示</small></label><textarea id="me_bank" rows="2" maxlength="120" placeholder="例：見本銀行 本店 普通 1234567 サンプルコウボウ"></textarea></div>
+      </div>
+
+      <div class="card form">
+        <h2>見た目 <small id="lookNote"></small></h2>
+        <div>
+          <label>色テンプレ</label>
+          <div class="chips" id="colorChips"></div>
+        </div>
+        <div>
+          <label>印影 <small>発行者欄の右に重なります</small></label>
+          <div class="chips" id="sealChips"></div>
+          <div class="seal-preview" id="sealPreview" hidden></div>
+          <input id="sealFile" type="file" accept="image/*" hidden>
+        </div>
+        <div>
+          <label>ロゴ</label>
+          <div class="chips" id="logoChips"></div>
+          <img id="logoPreview" class="logo-preview" alt="" hidden>
+          <input id="logoFile" type="file" accept="image/*" hidden>
+        </div>
+      </div>
+
+      <div class="card form">
+        <h2>税と番号</h2>
+        <div>
+          <label>消費税の端数 <small>税率ごとに合計してから 1 回</small></label>
+          <div class="chips" id="roundChips"></div>
+        </div>
+        <div>
+          <label>税率の選択肢 <small>品目ごとに選べる税率</small></label>
+          <div class="chips" id="rateChips"></div>
+          <div class="row-add"><input id="newRate" type="number" inputmode="decimal" min="0" max="100" step="0.1" placeholder="例：5"><button class="secondary small" type="button" id="addRate">税率を追加</button></div>
+        </div>
+        <div>
+          <label>番号の形 <small>接頭 - 年 - 連番</small></label>
+          <div class="row4" id="prefixRow"></div>
+          <label class="switch"><span>番号に年を入れる <small>I-2026-001 の「2026」</small></span><input id="yearInNo" type="checkbox"></label>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>バックアップ</h2>
+        <p class="note">書類・取引先・自分の情報・印影を 1 つのファイルに書き出します。「ファイル」アプリや iCloud Drive、メールに保存しておけば、機種変更やアプリの削除でも消えません。どこにも自動では送られません。</p>
+        <p class="note tight" id="lastBackup"></p>
+        <button class="secondary" type="button" id="backupBtn">バックアップを書き出す</button>
+        <label class="secondary file">バックアップを読み込む<input id="restoreFile" type="file" accept=".json,application/json" hidden></label>
+      </div>
+
+      <div class="card" id="buyCard">
+        <h2>無制限・印影・テンプレ</h2>
+        <p class="note" id="buyNote"></p>
+        <button class="primary" type="button" id="buyBtn">購入する</button>
+        <button class="secondary" type="button" id="restoreBtn">購入を復元する</button>
+      </div>
+
+      <div class="card links">
+        <h2>このアプリについて</h2>
+        <p class="note">書類はこの iPhone の中だけに保存します。どこにも送信せず、iCloud にも保存しません。会員登録・広告・利用状況の収集はありません。消費税・源泉徴収の計算は国税庁の案内に沿った目安です。最終の確認は税務署・税理士へ。</p>
+        <button class="row-link" type="button" id="privacyBtn">プライバシーポリシー<span>›</span></button>
+        <button class="row-link" type="button" id="supportBtn">お問い合わせ・使い方<span>›</span></button>
+        <button class="row-link" type="button" id="reviewBtn">App Store でレビューを書く<span>›</span></button>
+        <p class="note">提供：株式会社256　バージョン <span id="version">1.0.0</span></p>
+      </div>
+    </section>
+  </main>
+
+  <!-- 作る：画面下の合計と主ボタン -->
+  <div class="totalbar" id="totalbar" hidden>
+    <div class="tb-sum"><span id="tbLabel">合計（税込）</span><b id="tbTotal">¥0</b></div>
+    <button class="secondary" type="button" id="previewBtn">プレビュー</button>
+    <button class="primary" type="button" id="pdfBtn">PDF にする</button>
+  </div>
+  <!-- 書類：作るボタン -->
+  <div class="fabbar" id="fabbar"><button class="primary" type="button" id="createBtn">＋ 作る</button></div>
+
+  <nav class="tabs" aria-label="画面の切り替え">
+    <button type="button" data-tab="docs" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2h9l5 5v15H6z"/><path d="M15 2v5h5M9 13h6M9 17h6"/></svg>書類</button>
+    <button type="button" data-tab="edit"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>作る</button>
+    <button type="button" data-tab="settings"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>設定</button>
+  </nav>
+</div>
+
+<!-- プレビュー（A4 を縮小） -->
+<div class="sheet-modal" id="previewModal" hidden>
+  <div class="sm-bar"><button type="button" class="sm-close" id="previewClose">閉じる</button><span>プレビュー</span><span class="sm-pages" id="previewInfo"></span></div>
+  <div class="sm-body" id="previewBody"><div class="sm-scale" id="previewScale"></div></div>
+  <div class="sm-foot">
+    <div class="chips" id="previewColors"></div>
+    <button class="primary" type="button" id="pdfBtn2">PDF にする</button>
+    <p class="note" id="stampNote" hidden>一般に、5万円以上の領収書を紙で渡すときは収入印紙が必要です。PDF など電子で渡す場合は不要です。</p>
+  </div>
+</div>
+
+<!-- 購入のシート -->
+<div class="sheet-modal pay" id="payModal" hidden>
+  <div class="pay-box">
+    <h2 id="payTitle">無料で作れるのは 3 枚までです</h2>
+    <ul class="bullets">
+      <li><b>書類を無制限に</b>作れます（作った 3 枚もそのまま使えます）</li>
+      <li><b>印影・ロゴ</b>を書類に載せられます</li>
+      <li><b>色テンプレ 5 色</b>から選べます</li>
+    </ul>
+    <p class="note">1 回の購入でずっと使えます。サブスクリプションではありません。書類はこの iPhone の中だけに保存され、どこにも送られません。</p>
+    <button class="primary" type="button" id="payBuy">購入する</button>
+    <button class="secondary" type="button" id="payRestore">購入を復元する</button>
+    <button class="secondary plain" type="button" id="payLater">あとで</button>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<script src="core.js"></script>
+<script src="paper.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

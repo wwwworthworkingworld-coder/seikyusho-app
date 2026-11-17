@@ -1,0 +1,9 @@
+{
+  "appId": "com.company256.seikyusho",
+  "appName": "請求書ラクラク",
+  "webDir": "www",
+  "ios": {
+    "contentInset": "never",
+    "scrollEnabled": false
+  }
+}

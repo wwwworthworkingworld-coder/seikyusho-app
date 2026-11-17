@@ -1,0 +1,7 @@
+{
+  "name": "seikyusho-pdf",
+  "version": "1.0.0",
+  "private": true,
+  "description": "書類の HTML を A4 の PDF にする（WKWebView＋UIPrintPageRenderer）。端末の中だけで作り、共有シートに渡す",
+  "capacitor": { "ios": { "src": "ios" } }
+}
