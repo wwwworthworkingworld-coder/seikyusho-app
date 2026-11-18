@@ -39,6 +39,8 @@
       document.head.appendChild(s);
       if (q.get("open")) setTimeout(() => { const li = document.querySelector(".doclist li"); if (li) li.click(); if (q.get("open") === "preview") setTimeout(() => document.getElementById("previewBtn").click(), 300); }, 400);
       if (q.get("pay") !== null) setTimeout(() => document.getElementById("createBtn").click(), 500);
+      // 撮影用：指定の要素まで送る（例 &to=colorChips で「見た目」の所）
+      if (q.get("to")) setTimeout(() => { const el = document.getElementById(q.get("to")); if (el) document.getElementById("scroll").scrollTop = el.closest(".card").offsetTop - 8; }, 700);
     });
   }
 })();

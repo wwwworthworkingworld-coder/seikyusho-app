@@ -11,3 +11,4 @@ android/app/build/
 android/local.properties
 *.keystore
 *.jks
+_build/
