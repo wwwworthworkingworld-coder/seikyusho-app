@@ -80,7 +80,7 @@
       }
     } else if (preset.mawashi) {
       // 外周に社名（上から時計回り）、中央に役職（縦書き 2 列）
-      const center = String(seal.center || "代表取締役印").slice(0, 8);
+      const center = String(seal.center || C.sealCenterDefault(seal.text)).slice(0, 8);
       const n = text.length;
       const fs = Math.min(12.5, Math.floor(150 / Math.max(n, 6)));
       body += `<circle cx="50" cy="50" r="46" fill="none" stroke="${red}" stroke-width="${preset.stroke}"/>`;

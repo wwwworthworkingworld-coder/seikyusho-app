@@ -199,6 +199,26 @@
   </div>
 </div>
 
+<!-- ロゴの自動生成 -->
+<div class="sheet-modal" id="logoModal" hidden>
+  <div class="sm-bar"><button type="button" class="sm-close" id="logoClose">閉じる</button><span>ロゴを自動で作る</span><span class="sm-pages"></span></div>
+  <div class="sm-body logo-body">
+    <div class="logo-stage" id="logoStage"></div>
+    <p class="note" id="logoHint">屋号から、型・色・書体の組み合わせを作ります。この iPhone の中だけで作り、どこにも送りません。</p>
+    <div class="card form">
+      <div><label>色</label><div class="chips" id="logoPalettes"></div></div>
+      <div><label>書体</label><div class="chips" id="logoFonts"></div></div>
+      <div><label>型</label><div class="chips" id="logoTemplates"></div></div>
+    </div>
+  </div>
+  <div class="sm-foot">
+    <div class="row2">
+      <button class="secondary" type="button" id="logoAgain">もう一度作る</button>
+      <button class="primary" type="button" id="logoUse">これにする</button>
+    </div>
+  </div>
+</div>
+
 <!-- 購入のシート -->
 <div class="sheet-modal pay" id="payModal" hidden>
   <div class="pay-box">
@@ -218,6 +238,7 @@
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <script src="core.js"></script>
 <script src="paper.js"></script>
+<script src="logo.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

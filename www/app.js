@@ -329,7 +329,7 @@
       if (t !== "none" && !purchased) { openPay("印影・ロゴは購入後に使えます"); return; }
       if (t === "none") { s.seal = { type: "none" }; save(); renderSettings(); return; }
       if (t === "text") {
-        s.seal = Object.assign({ type: "text", text: m.name || "", preset: "kaku-classic", noin: true, center: "代表取締役印" }, s.seal && s.seal.type === "text" ? s.seal : {});
+        s.seal = Object.assign({ type: "text", text: m.name || "", preset: "kaku-classic", noin: true, center: C.sealCenterDefault(m.name) }, s.seal && s.seal.type === "text" ? s.seal : {});
         if (!s.seal.preset) s.seal.preset = s.seal.shape === "square" ? "kaku-classic" : "maru-lines";
         if (!s.seal.text) s.seal.text = m.name || "";
         save(); renderSettings(); return;
@@ -354,13 +354,14 @@
       $("sealNoinRow").hidden = def.shape !== "square";
       $("sealNoin").checked = sl.noin !== false;
       $("sealCenterRow").hidden = !def.mawashi;
-      $("sealCenter").value = sl.center || "";
+      $("sealCenter").value = sl.center || ""; $("sealCenter").placeholder = C.sealCenterDefault(sl.text);
     }
     $("sealPreview").hidden = sealType === "none";
     if (sealType !== "none") renderSealPreview();
-    chips($("logoChips"), [["none", "なし"], ["image", "写真から選ぶ", purchased ? "" : "lock"]], s.logo ? "image" : "none", t => {
-      if (t === "image" && !purchased) { openPay("印影・ロゴは購入後に使えます"); return; }
-      if (t === "none") { s.logo = ""; save(); renderSettings(); return; }
+    chips($("logoChips"), [["none", "なし"], ["auto", "自動で作る", purchased ? "" : "lock"], ["image", "写真から選ぶ", purchased ? "" : "lock"]], s.logo ? (s.logoSpec ? "auto" : "image") : "none", t => {
+      if (t !== "none" && !purchased) { openPay("印影・ロゴは購入後に使えます"); return; }
+      if (t === "none") { s.logo = ""; s.logoSpec = null; save(); renderSettings(); return; }
+      if (t === "auto") { openLogoMaker(); return; }
       $("logoFile").click();
     });
     $("logoPreview").hidden = !s.logo; if (s.logo) $("logoPreview").src = s.logo;
@@ -424,7 +425,49 @@
   };
   $("logoFile").onchange = async e => {
     const f = e.target.files[0]; e.target.value = ""; if (!f) return;
-    try { data.settings.logo = await readImage(f, 600, false); save(); renderSettings(); toast("ロゴを設定しました"); } catch (err) { toast(err.message); }
+    try { data.settings.logo = await readImage(f, 600, false); data.settings.logoSpec = null; save(); renderSettings(); toast("ロゴを設定しました"); } catch (err) { toast(err.message); }
+  };
+
+  // ---- ロゴの自動生成（端末内。屋号から型×色×書体を作る。「これにする」で透過 PNG にして設定のロゴへ）
+  const Lg = window.SeikyushoLogo;
+  let logoSpec = null;
+  function logoName() { return (data.me.name || "").trim(); }
+  function openLogoMaker() {
+    if (!logoName()) { toast("先に屋号・名前を入れてください"); return; }
+    logoSpec = data.settings.logoSpec ? Object.assign({}, data.settings.logoSpec) : Lg.randomSpec(Date.now() & 0xffff);
+    $("logoModal").hidden = false; renderLogoMaker();
+  }
+  function renderLogoMaker() {
+    $("logoStage").innerHTML = Lg.logoSvg(logoName(), logoSpec);
+    chips($("logoPalettes"), Lg.PALETTES.map(([k, label, main]) => [k, `<span class="sw" style="background:${main}"></span>${label}`]), logoSpec.palette, v => { logoSpec.palette = v; renderLogoMaker(); });
+    chips($("logoFonts"), Lg.FONTS.map(([k, label]) => [k, label]), logoSpec.font, v => { logoSpec.font = v; renderLogoMaker(); });
+    chips($("logoTemplates"), Lg.TEMPLATES.map(([k, label]) => [k, label]), logoSpec.template, v => { logoSpec.template = v; renderLogoMaker(); });
+  }
+  $("logoAgain").onclick = () => { let n; do { n = Lg.randomSpec((Date.now() + Math.floor(Math.random() * 1e6)) & 0xffffff); } while (n.template === logoSpec.template && n.palette === logoSpec.palette); logoSpec = n; renderLogoMaker(); };
+  $("logoClose").onclick = () => { $("logoModal").hidden = true; };
+  // SVG → 透過 PNG（長辺 1024px）。フォントは端末のものがそのまま使われる
+  function svgToPng(svg, maxPx) {
+    return new Promise((resolve, reject) => {
+      const vb = (svg.match(/viewBox="([^"]+)"/) || [])[1].split(" ").map(Number);
+      const w = vb[2], h = vb[3], s = maxPx / Math.max(w, h);
+      const img = new Image();
+      const url = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml;charset=utf-8" }));
+      img.onload = () => {
+        const cv = document.createElement("canvas"); cv.width = Math.round(w * s); cv.height = Math.round(h * s);
+        cv.getContext("2d").drawImage(img, 0, 0, cv.width, cv.height);
+        URL.revokeObjectURL(url);
+        try { resolve(cv.toDataURL("image/png")); } catch (e) { reject(e); }
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("ロゴを画像にできませんでした")); };
+      img.src = url;
+    });
+  }
+  $("logoUse").onclick = async () => {
+    try {
+      const svg = Lg.logoSvg(logoName(), logoSpec);
+      data.settings.logo = await svgToPng(svg, 1024); data.settings.logoSpec = Object.assign({}, logoSpec);
+      await save(true); $("logoModal").hidden = true; renderSettings(); toast("ロゴを設定しました");
+    } catch (e) { toast(e.message || "ロゴを作れませんでした"); }
   };
 
   // ---- ファイルの書き出し（共有シート。利用者が保存先を選ぶ）

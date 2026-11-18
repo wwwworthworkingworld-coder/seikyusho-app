@@ -137,6 +137,8 @@ t("印影のプリセット 6 種：角印は四角と之印、回し文字は t
   assert.ok(sv("kaku-worn").includes("<filter") && sv("kaku-worn").includes("feTurbulence"));
   assert.ok(sv("maru-modern").includes("#e0493a") && sv("maru-modern").includes("Maru Gothic"));
   assert.ok(sv("kaku-bold").includes('stroke-width="4.6"'));
+  assert.deepStrictEqual(["株式会社見本", "合同会社見本", "見本工房", "一般社団法人見本"].map(C.sealCenterDefault), ["代表取締役印", "代表社員之印", "代表者印", "理事長印"]);
+  assert.ok(P.sealSvg({ type: "text", text: "合同会社見本", preset: "maru-mawashi" }).includes(">社<"));
   assert.strictEqual(P.sealSvg({ type: "text", text: "", preset: "kaku-classic" }), "");
   const a = sv("maru-lines"), b = sv("maru-lines"); assert.notStrictEqual(a.match(/id="(s\w+)/)?.[1], b.match(/id="(s\w+)/)?.[1] || "x");
 });
