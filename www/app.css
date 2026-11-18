@@ -122,8 +122,12 @@ input[type=search]{margin-bottom:12px}
 .row-link{display:flex;justify-content:space-between;width:100%;padding:12px 0;border:0;border-top:1px solid var(--line);background:none;font-size:15px;text-align:left}
 .row-link span{color:var(--muted)}
 .links .note:last-child{margin:12px 0 0}
-.seal-opts{display:grid;gap:10px;margin-top:10px}
-.seal-preview{margin-top:10px;width:84px;height:84px}
+.seal-opts{display:grid;gap:12px;margin-top:10px}
+.seal-tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.seal-tile{border:2px solid var(--line);border-radius:12px;background:#fff;padding:8px 4px 6px;display:flex;flex-direction:column;align-items:center;gap:4px;font-size:12px;color:#1f2430}
+.seal-tile svg{width:64px;height:64px}
+.seal-tile[aria-pressed="true"]{border-color:var(--main);box-shadow:0 0 0 2px var(--main-weak)}
+.seal-preview{margin-top:10px;width:84px;height:84px;background:#fff;border-radius:8px;padding:2px}
 .seal-preview .sheet{all:unset}
 .logo-preview{margin-top:8px;max-width:160px;max-height:56px;background:#fff;border-radius:6px;padding:4px}
 

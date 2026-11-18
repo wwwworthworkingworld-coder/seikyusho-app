@@ -111,10 +111,11 @@
           <label>印影 <small>発行者欄の右に重なります</small></label>
           <div class="chips" id="sealChips"></div>
           <div id="sealOpts" class="seal-opts" hidden>
-            <div class="chips" id="sealShapeChips"></div>
-            <div class="chips" id="sealFontChips"></div>
             <input id="sealText" type="text" maxlength="16" placeholder="印影の文字（屋号・会社名）">
+            <div class="seal-tiles" id="sealTiles"></div>
+            <div class="chips" id="sealFontChips"></div>
             <label class="switch" id="sealNoinRow"><span>末尾に「之印」を付ける <small>角印の一般的な形（株式会社○○之印）</small></span><input id="sealNoin" type="checkbox"></label>
+            <div id="sealCenterRow"><label for="sealCenter">中央の文字 <small>回し文字のとき。例：代表取締役印、印</small></label><input id="sealCenter" type="text" maxlength="8" placeholder="代表取締役印"></div>
           </div>
           <div class="seal-preview" id="sealPreview" hidden></div>
           <input id="sealFile" type="file" accept="image/*" hidden>

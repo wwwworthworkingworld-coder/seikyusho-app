@@ -123,6 +123,18 @@
   const sealSquareText = (name, noin) => { const s = String(name || "").replace(/\s+/g, "").slice(0, 16); return s ? s + (noin ? "之印" : "") : ""; };
   const SEAL_FONTS = [["mincho", "明朝", '"Hiragino Mincho ProN","Hiragino Mincho Pro","Yu Mincho","YuMincho","MS Mincho",serif'], ["gothic", "ゴシック", '"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic","Meiryo",sans-serif'], ["maru", "丸ゴシック", '"Hiragino Maru Gothic ProN","Hiragino Maru Gothic Pro","Yu Gothic","Meiryo",sans-serif']];
 
+  // 印影のプリセット（印章店の見本の傾向を参考に：角印＝社名＋「之印」の縦書き 2〜3 列、丸印＝外周に社名・中央に役職、書体は篆書・印相・古印・楷書が主流。
+  // 篆書・印相体は同梱できるライセンスのフォントが無いので、iOS 内蔵の明朝・ゴシック・丸ゴシックで枠・配置・かすれを変える）
+  const SEAL_PRESETS = [
+    ["kaku-classic", "角印・標準", { shape: "square", font: "mincho", stroke: 2.6, worn: false }],
+    ["kaku-bold", "角印・太枠", { shape: "square", font: "gothic", stroke: 4.6, worn: false }],
+    ["kaku-worn", "角印・かすれ", { shape: "square", font: "mincho", stroke: 3.2, worn: true }],
+    ["maru-mawashi", "丸印・回し文字", { shape: "round", font: "mincho", stroke: 2.8, worn: false, mawashi: true }],
+    ["maru-lines", "丸印・楷書風", { shape: "round", font: "mincho", stroke: 2.6, worn: false }],
+    ["maru-modern", "丸印・細枠", { shape: "round", font: "maru", stroke: 1.4, worn: false, light: true }],
+  ];
+  const sealPreset = id => SEAL_PRESETS.find(p => p[0] === id) || SEAL_PRESETS[0];
+
   // 一覧：月ごとにまとめる（新しい月が先）。請求書は差引額、それ以外は税込
   function groupByMonth(docs, opt) {
     const m = new Map();
@@ -168,6 +180,6 @@
     return bad;
   }
 
-  const api = { KINDS, PREFIX, FREE_DOCS, COLORS, WH_LIMIT, roundBy, lineAmount, calc, shownAmount, nextNo, defaultDue, isRegNo, normalizeRegNo, convert, canCreate, freeLeft, backup, restore, mergeDocs, sealLines, sealSquareText, SEAL_FONTS, groupByMonth, recentClients, recentItems, shouldAskReview, backupWarning, validate, fmtDate, yen };
+  const api = { KINDS, PREFIX, FREE_DOCS, COLORS, WH_LIMIT, roundBy, lineAmount, calc, shownAmount, nextNo, defaultDue, isRegNo, normalizeRegNo, convert, canCreate, freeLeft, backup, restore, mergeDocs, sealLines, sealSquareText, SEAL_FONTS, SEAL_PRESETS, sealPreset, groupByMonth, recentClients, recentItems, shouldAskReview, backupWarning, validate, fmtDate, yen };
   if (typeof module !== "undefined" && module.exports) module.exports = api; else root.SeikyushoCore = api;
 })(typeof window !== "undefined" ? window : globalThis);

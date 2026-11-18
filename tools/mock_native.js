@@ -22,7 +22,7 @@
     await P.Preferences.set({ key: "seeded", value: "1" });
     await P.Preferences.set({ key: "seikyusho-app-v1", value: JSON.stringify({ docs, clients: [{ name: "見本商事", honor: "御中" }, { name: "サンプル工房", honor: "様" }, { name: "みほんデザイン事務所", honor: "御中" }], items: [],
       me: { name: "サンプル工房", addr: "〒000-0000 東京都見本区見本町 1-2-3", tel: "03-0000-0000", mail: "info@example.com", reg: "T1234567890123", taxable: true, bank: "見本銀行 本店 普通 1234567 サンプルコウボウ" },
-      settings: { rounding: "floor", rates: [10, 8], defaultRate: 10, color: "navy", seal: { type: "text", text: "株式会社サンプル工房", shape: "round", font: "mincho", noin: true }, logo: "", prefix: { "見積書": "Q", "納品書": "D", "請求書": "I", "領収書": "R" }, yearInNo: true, created: 5, lastBackup: "", launches: 1, reviewAsked: false } }) });
+      settings: { rounding: "floor", rates: [10, 8], defaultRate: 10, color: "navy", seal: { type: "text", text: "株式会社サンプル工房", preset: "kaku-classic", noin: true, center: "代表取締役印" }, logo: "", prefix: { "見積書": "Q", "納品書": "D", "請求書": "I", "領収書": "R" }, yearInNo: true, created: 5, lastBackup: "", launches: 1, reviewAsked: false } }) });
     location.reload();
     return;
   }

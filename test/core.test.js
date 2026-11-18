@@ -126,6 +126,19 @@ t("印影の文字割り：法人格は省かない。3 文字以下 1 行、6 �
   assert.strictEqual(C.sealSquareText("見本商事", false), "見本商事");
   assert.strictEqual(C.SEAL_FONTS.length, 3);
 });
+t("印影のプリセット 6 種：角印は四角と之印、回し文字は textPath と中央の役職、かすれはフィルター、細枠は薄い朱", () => {
+  assert.strictEqual(C.SEAL_PRESETS.length, 6);
+  const sv = id => P.sealSvg({ type: "text", text: "株式会社見本商事", preset: id });
+  assert.ok(/<rect/.test(sv("kaku-classic")) && sv("kaku-classic").includes(">之<") && sv("kaku-classic").includes(">印<"));
+  assert.ok(!P.sealSvg({ type: "text", text: "見本商事", preset: "kaku-classic", noin: false }).includes(">之<"));
+  assert.ok(sv("maru-mawashi").includes("<textPath") && sv("maru-mawashi").includes(">代<") && sv("maru-mawashi").includes(">役<"));
+  assert.ok(P.sealSvg({ type: "text", text: "見本商事", preset: "maru-mawashi", center: "印" }).includes(">印<"));
+  assert.ok(sv("kaku-worn").includes("<filter") && sv("kaku-worn").includes("feTurbulence"));
+  assert.ok(sv("maru-modern").includes("#e0493a") && sv("maru-modern").includes("Maru Gothic"));
+  assert.ok(sv("kaku-bold").includes('stroke-width="4.6"'));
+  assert.strictEqual(P.sealSvg({ type: "text", text: "", preset: "kaku-classic" }), "");
+  const a = sv("maru-lines"), b = sv("maru-lines"); assert.notStrictEqual(a.match(/id="(s\w+)/)?.[1], b.match(/id="(s\w+)/)?.[1] || "x");
+});
 t("月ごとの一覧：新しい月が先、請求書は差引額で合計", () => {
   const docs = [
     { id: "1", kind: "請求書", no: "I-2026-001", date: "2026-10-05", wh: true, lines: [L("a", 1, 100000)] },
@@ -189,10 +202,10 @@ t("書類の HTML：印影・ロゴ・色が反映され、HTML の特殊文字�
   const h = P.paperHtml(Object.assign({}, DOC, { to: "<script>x</script>見本" }), ME, { color: "wine", seal: { type: "image", data: "data:image/png;base64,AAAA" }, logo: "data:image/png;base64,BBBB" });
   assert.ok(!h.includes("<script>x")); assert.ok(h.includes("&lt;script&gt;"));
   assert.ok(h.includes("data:image/png;base64,AAAA")); assert.ok(h.includes("data:image/png;base64,BBBB")); assert.ok(h.includes("#8b2942"));
-  const h2 = P.paperHtml(DOC, ME, { seal: { type: "text", text: "株式会社サンプル工房", font: "mincho" } });
-  assert.ok(h2.includes("seal-text")); assert.ok(h2.includes("株式会")); assert.ok(h2.includes("Hiragino Mincho"));
-  const h3 = P.paperHtml(DOC, ME, { seal: { type: "text", text: "株式会社見本商事", shape: "square", font: "gothic" } });
-  assert.ok(h3.includes("seal-text square")); assert.ok(h3.includes("之印")); assert.ok(h3.includes("Hiragino Sans"));
+  const h2 = P.paperHtml(DOC, ME, { seal: { type: "text", text: "株式会社サンプル工房", preset: "maru-lines" } });
+  assert.ok(h2.includes("<svg")); assert.ok(h2.includes("<circle")); assert.ok(h2.includes("株式会")); assert.ok(h2.includes("Hiragino Mincho"));
+  const h3 = P.paperHtml(DOC, ME, { seal: { type: "text", text: "株式会社見本商事", preset: "kaku-bold" } });
+  assert.ok(h3.includes("<rect")); assert.ok(h3.includes(">之<")); assert.ok(h3.includes("Hiragino Sans"));
 });
 t("書類の HTML を PDF 用の 1 ページ文書に包む（A4・余白・フォント）", () => {
   const full = P.pdfDocument(P.paperHtml(DOC, ME, {}));

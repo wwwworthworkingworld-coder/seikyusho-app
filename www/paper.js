@@ -25,10 +25,7 @@
 .sheet .logo{max-width:40mm;max-height:14mm;display:block;margin-bottom:2mm}
 .sheet .seal{position:absolute;right:0;top:9mm;width:22mm;height:22mm}
 .sheet .seal img{width:22mm;height:22mm;object-fit:contain;mix-blend-mode:multiply}
-.sheet .seal-text{box-sizing:border-box;width:22mm;height:22mm;border:1.3pt solid #d1352b;border-radius:50%;color:#d1352b;display:flex;flex-direction:column;align-items:center;justify-content:center;font-weight:700;line-height:1.02;letter-spacing:0;padding:0.6mm;opacity:.92;overflow:hidden}
-.sheet .seal-text span{display:block;white-space:nowrap}
-.sheet .seal-text.square{border-radius:1pt;flex-direction:row-reverse;align-items:center;justify-content:center;padding:1mm;line-height:1.0}
-.sheet .seal-text.square span{display:block;writing-mode:vertical-rl;text-orientation:upright;white-space:nowrap;margin:0 0.3mm;letter-spacing:0.02em}
+.sheet .seal svg{width:22mm;height:22mm;display:block}
 .sheet .amount{margin:6mm 0 4mm;font-size:11pt;font-weight:700;display:flex;align-items:flex-end;gap:4mm}
 .sheet .amount b{font-size:20pt;border-bottom:1.5pt solid #333;min-width:70mm;padding:0 2mm 0.5mm;text-align:right;font-variant-numeric:tabular-nums}
 .sheet .amount small{font-weight:400;font-size:9pt}
@@ -56,28 +53,59 @@
 .sheet.mono .sums td:first-child{background:#fff}
 `;
 
+  // 印影を SVG で描く（プレビューと PDF で同じ見た目。枠・配置・かすれはプリセット、文字は屋号）
+  let sealSeq = 0;
+  function sealSvg(seal, size = "22mm") {
+    if (!seal || seal.type !== "text") return "";
+    const preset = C.sealPreset(seal.preset || (seal.shape === "square" ? "kaku-classic" : "maru-lines"))[2];
+    const font = (C.SEAL_FONTS.find(f => f[0] === (seal.font || preset.font)) || C.SEAL_FONTS[0])[2];
+    const red = preset.light ? "#e0493a" : "#d1352b";
+    const id = "s" + (++sealSeq) + Math.random().toString(36).slice(2, 6);
+    const text = String(seal.text || "").replace(/\s+/g, "").slice(0, 16);
+    if (!text) return "";
+    const E = esc;
+    const vcol = (chars, x, fs, attrs = "") => { const top = 50 - chars.length * fs / 2; return [...chars].map((ch, i) => `<text x="${x}" y="${(top + i * fs + fs / 2).toFixed(1)}" font-size="${fs}" font-weight="700" text-anchor="middle" dominant-baseline="central" style="font-family:${E(font)}" fill="${red}"${attrs}>${E(ch)}</text>`).join(""); };
+    let body = "";
+    if (preset.shape === "square") {
+      const txt = seal.noin !== false ? text + "之印" : text;
+      const cols = Math.max(1, Math.ceil(txt.length / 5));
+      const per = Math.ceil(txt.length / cols);
+      const fs = Math.min(30, Math.floor(72 / per));            // 1 列あたりの高さ 72 に収める（枠から 1 文字分あける）
+      const gap = Math.min(30, 84 / cols);
+      body += `<rect x="6" y="6" width="88" height="88" rx="2" fill="none" stroke="${red}" stroke-width="${preset.stroke}"/>`;
+      for (let k = 0; k < cols; k++) {
+        const x = 50 + (cols - 1) * gap / 2 - k * gap;          // 右の列から
+        const col = txt.slice(k * per, (k + 1) * per);
+        body += vcol(col, x, fs);
+      }
+    } else if (preset.mawashi) {
+      // 外周に社名（上から時計回り）、中央に役職（縦書き 2 列）
+      const center = String(seal.center || "代表取締役印").slice(0, 8);
+      const n = text.length;
+      const fs = Math.min(12.5, Math.floor(150 / Math.max(n, 6)));
+      body += `<circle cx="50" cy="50" r="46" fill="none" stroke="${red}" stroke-width="${preset.stroke}"/>`;
+      body += `<defs><path id="${id}p" d="M50,50 m-33,0 a33,33 0 1,1 66,0 a33,33 0 1,1 -66,0"/></defs>`;
+      body += `<text font-size="${fs}" font-weight="700" fill="${red}" style="font-family:${E(font)};letter-spacing:${n > 8 ? 0 : 1}px"><textPath href="#${id}p" startOffset="25%" text-anchor="middle">${E(text)}</textPath></text>`;
+      const cc = Math.ceil(center.length / 2), c1 = center.slice(0, cc), c2 = center.slice(cc);
+      const cfs = Math.min(13, Math.floor(40 / Math.max(cc, 3)));
+      body += vcol(c1, c2 ? 50 + cfs * 0.55 : 50, cfs);
+      if (c2) body += vcol(c2, 50 - cfs * 0.55, cfs);
+    } else {
+      const lines = C.sealLines(text);
+      const longest = Math.max(...lines.map(l => l.length));
+      const fs = Math.min(Math.floor(64 / longest), Math.floor(64 / lines.length), 30);
+      const lh = fs * 1.05, y0 = 50 - (lines.length - 1) * lh / 2 + fs * 0.36;
+      body += `<circle cx="50" cy="50" r="46" fill="none" stroke="${red}" stroke-width="${preset.stroke}"/>`;
+      lines.forEach((l, k) => { body += `<text x="50" y="${(y0 + k * lh).toFixed(1)}" font-size="${fs}" font-weight="700" text-anchor="middle" style="font-family:${E(font)}" fill="${red}">${E(l)}</text>`; });
+    }
+    // かすれ：ノイズで印面を少し欠けさせる
+    const worn = preset.worn ? `<filter id="${id}w" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency="0.55" numOctaves="2" seed="7" result="n"/><feColorMatrix in="n" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 -2.2 2.1" result="m"/><feComposite in="SourceGraphic" in2="m" operator="in"/></filter>` : "";
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="${size}" height="${size}" class="seal-svg" aria-label="印影">${worn ? `<defs>${worn}</defs><g filter="url(#${id}w)" opacity=".92">${body}</g>` : `<g opacity=".92">${body}</g>`}</svg>`;
+  }
   function sealHtml(seal) {
     if (!seal || seal.type === "none") return "";
     if (seal.type === "image" && seal.data) return `<div class="seal"><img src="${esc(seal.data)}" alt=""></div>`;
-    if (seal.type === "text") {
-      const font = (C.SEAL_FONTS.find(f => f[0] === seal.font) || C.SEAL_FONTS[0])[2];
-      if (seal.shape === "square") {
-        const txt = C.sealSquareText(seal.text, seal.noin !== false);
-        if (!txt) return "";
-        // 角印：縦書き。文字数で列数と大きさを決める（1 列 4〜5 文字）
-        const cols = Math.max(1, Math.ceil(txt.length / 5));
-        const per = Math.ceil(txt.length / cols);
-        const colsHtml = Array.from({ length: cols }, (_, i) => `<span>${esc(txt.slice(i * per, (i + 1) * per))}</span>`).join("");
-        const size = per <= 3 ? 15 : per <= 4 ? 12.5 : per <= 5 ? 10.5 : 9;
-        return `<div class="seal"><div class="seal-text square" style="font-size:${size}pt;font-family:${font}">${colsHtml}</div></div>`;
-      }
-      const lines = C.sealLines(seal.text || "");
-      if (!lines.length) return "";
-      const longest = Math.max(...lines.map(l => l.length));
-      // 丸印：行数と 1 行の文字数から、枠いっぱいに近い大きさにする
-      const size = lines.length === 1 ? (longest <= 2 ? 20 : 16) : lines.length === 2 ? (longest <= 2 ? 15 : 12.5) : lines.length === 3 ? 10.5 : 8.5;
-      return `<div class="seal"><div class="seal-text" style="font-size:${size}pt;font-family:${font}">${lines.map(l => `<span>${esc(l)}</span>`).join("")}</div></div>`;
-    }
+    if (seal.type === "text") { const svg = sealSvg(seal); return svg ? `<div class="seal">${svg}</div>` : ""; }
     return "";
   }
 
@@ -144,6 +172,6 @@
 
   const pdfFileName = doc => `${doc.kind || "書類"}_${String(doc.no || "").replace(/[\\/:*?"<>|\s]/g, "")}_${String(doc.to || "").replace(/[\\/:*?"<>|\s]/g, "").slice(0, 20)}.pdf`;
 
-  const api = { CSS, paperHtml, pdfDocument, pdfFileName };
+  const api = { CSS, paperHtml, pdfDocument, pdfFileName, sealSvg };
   if (typeof module !== "undefined" && module.exports) module.exports = api; else root.SeikyushoPaper = api;
 })(typeof window !== "undefined" ? window : globalThis);

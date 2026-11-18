@@ -327,7 +327,8 @@
       if (t !== "none" && !purchased) { openPay("印影・ロゴは購入後に使えます"); return; }
       if (t === "none") { s.seal = { type: "none" }; save(); renderSettings(); return; }
       if (t === "text") {
-        s.seal = Object.assign({ type: "text", text: m.name || "", shape: "round", font: "mincho", noin: true }, s.seal && s.seal.type === "text" ? s.seal : {});
+        s.seal = Object.assign({ type: "text", text: m.name || "", preset: "kaku-classic", noin: true, center: "代表取締役印" }, s.seal && s.seal.type === "text" ? s.seal : {});
+        if (!s.seal.preset) s.seal.preset = s.seal.shape === "square" ? "kaku-classic" : "maru-lines";
         if (!s.seal.text) s.seal.text = m.name || "";
         save(); renderSettings(); return;
       }
@@ -336,11 +337,22 @@
     $("sealOpts").hidden = sealType !== "text";
     if (sealType === "text") {
       const sl = s.seal;
-      chips($("sealShapeChips"), [["round", "丸印"], ["square", "角印"]], sl.shape || "round", v => { sl.shape = v; save(); renderSettings(); });
-      chips($("sealFontChips"), C.SEAL_FONTS.map(([k, label]) => [k, label]), sl.font || "mincho", v => { sl.font = v; save(); renderSettings(); });
+      if (!sl.preset) sl.preset = sl.shape === "square" ? "kaku-classic" : "maru-lines";
       $("sealText").value = sl.text || "";
-      $("sealNoinRow").hidden = (sl.shape || "round") !== "square";
+      // プリセットは屋号を入れた実物のプレビューをタイルで並べ、1 タップで選ぶ
+      const tiles = $("sealTiles"); tiles.innerHTML = "";
+      C.SEAL_PRESETS.forEach(([id, label, def]) => {
+        const b = document.createElement("button"); b.type = "button"; b.className = "seal-tile"; b.setAttribute("aria-pressed", String(sl.preset === id));
+        b.innerHTML = Paper.sealSvg(Object.assign({}, sl, { preset: id, font: sl.font && sl.fontUser ? sl.font : def.font }), "64px") + `<span>${esc(label)}</span>`;
+        b.onclick = () => { sl.preset = id; if (!sl.fontUser) sl.font = def.font; save(); renderSettings(); };
+        tiles.appendChild(b);
+      });
+      const def = C.sealPreset(sl.preset)[2];
+      chips($("sealFontChips"), C.SEAL_FONTS.map(([k, label]) => [k, label]), sl.font || def.font, v => { sl.font = v; sl.fontUser = true; save(); renderSettings(); });
+      $("sealNoinRow").hidden = def.shape !== "square";
       $("sealNoin").checked = sl.noin !== false;
+      $("sealCenterRow").hidden = !def.mawashi;
+      $("sealCenter").value = sl.center || "";
     }
     $("sealPreview").hidden = sealType === "none";
     if (sealType !== "none") renderSealPreview();
@@ -376,8 +388,9 @@
     sp.innerHTML = `<div class="sheet" style="all:unset">${m ? m[0] : ""}</div>`;
     sp.querySelectorAll(".seal").forEach(e => { e.style.position = "static"; });
   }
-  $("sealText").addEventListener("input", () => { const sl = data.settings.seal; if (sl && sl.type === "text") { sl.text = $("sealText").value; sl.userText = true; save(); renderSealPreview(); } });
+  $("sealText").addEventListener("input", () => { const sl = data.settings.seal; if (sl && sl.type === "text") { sl.text = $("sealText").value; sl.userText = true; save(); renderSealPreview(); document.querySelectorAll("#sealTiles .seal-tile").forEach((b, i) => { const [id, , def] = C.SEAL_PRESETS[i]; b.firstElementChild.outerHTML = Paper.sealSvg(Object.assign({}, sl, { preset: id, font: sl.fontUser ? sl.font : def.font }), "64px"); }); } });
   $("sealNoin").onchange = () => { const sl = data.settings.seal; if (sl && sl.type === "text") { sl.noin = $("sealNoin").checked; save(); renderSealPreview(); } };
+  $("sealCenter").addEventListener("input", () => { const sl = data.settings.seal; if (sl && sl.type === "text") { sl.center = $("sealCenter").value; save(); renderSealPreview(); } });
   $("addRate").onclick = () => {
     const r = Number($("newRate").value); if (!(r >= 0 && r <= 100)) { toast("0〜100 の数で入れてください"); return; }
     if (!data.settings.rates.includes(r)) data.settings.rates.push(r);
