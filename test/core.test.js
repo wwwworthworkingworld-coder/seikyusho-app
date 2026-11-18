@@ -293,6 +293,23 @@ t("ロゴ：型 10 種・色 6・書体 3。どの組み合わせでも屋号を
   assert.ok(!s.includes("<b>") && s.includes("&lt;b&gt;"));
   assert.strictEqual(Lg.logoSvg("", {}), "");
 });
+t("ロゴ：全 10 型 × 8 色 × 3 書体 × 屋号 4 種（2 字・12 字・英字・長い英字）で、図形と文字が安全領域（8%）からはみ出さない", () => {
+  const names = ["見本", "株式会社見本商事ホールディングス", "Sample Works LLC", "Yamada Design Studio International"];
+  let n = 0;
+  Lg.TEMPLATES.forEach(([tp]) => Lg.PALETTES.forEach(([pl]) => Lg.FONTS.forEach(([f]) => names.forEach(nm => {
+    const svg = Lg.logoSvg(nm, { template: tp, palette: pl, font: f, seed: 3 });
+    const b = Lg.logoBounds(svg);
+    const sq = tp === "monogram";
+    const lim = sq ? { x0: 8, y0: 8, x1: 92, y1: 92 } : Lg.SAFE;
+    assert.ok(b.x0 >= lim.x0 - 0.01 && b.y0 >= lim.y0 - 0.01 && b.x1 <= lim.x1 + 0.01 && b.y1 <= lim.y1 + 0.01, `${tp}/${pl}/${f}/${nm}: ${JSON.stringify(b)}`);
+    n++;
+  }))));
+  assert.strictEqual(n, 10 * 8 * 3 * 4);
+  // 頭文字 2 段：仕切り線が頭文字・屋号と重ならない
+  const sv = Lg.logoSvg("株式会社見本商事ホールディングス", { template: "initial-stack" });
+  const texts = (sv.match(/<text [^>]*>[^<]*<\/text>/g) || []).map(t2 => Lg.logoBounds(`<svg>${t2}</svg>`));
+  assert.ok(texts[0].x1 <= 107 && texts[1].x0 >= 109, JSON.stringify(texts));
+});
 t("ロゴ：同じ seed なら同じ案、違う seed なら別の案が出る。長い屋号は文字が小さくなる", () => {
   assert.deepStrictEqual(Lg.randomSpec(42), Lg.randomSpec(42));
   const specs = new Set(Array.from({ length: 30 }, (_, i) => JSON.stringify(Lg.randomSpec(i + 1))));

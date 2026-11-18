@@ -55,9 +55,17 @@
     return { template: TEMPLATES[Math.floor(r() * TEMPLATES.length)][0], palette: PALETTES[Math.floor(r() * PALETTES.length)][0], font: FONTS[Math.floor(r() * FONTS.length)][0], seed };
   }
 
-  // 文字幅のざっくりした見積もり（英数 0.6em、和文 1em）→ 文字の大きさを枠に合わせる
+  // 文字幅の見積もり（英数 0.62em、和文 1.0em）→ 文字の大きさを枠に合わせる
   const textWidth = (s, fs) => [...String(s)].reduce((w, ch) => w + (/[\x20-\x7e]/.test(ch) ? 0.62 : 1.0), 0) * fs;
-  const fitSize = (s, maxW, maxFs, minFs = 10) => { let fs = maxFs; while (fs > minFs && textWidth(s, fs) > maxW) fs -= 1; return fs; };
+  const fitSize = (s, maxW, maxFs, minFs = 8) => { let fs = maxFs; while (fs > minFs && textWidth(s, fs) > maxW) fs -= 1; return fs; };
+  // 屋号を枠に収める：9 まで縮め、それでも入らなければ末尾を「…」にする
+  function fitText(s, maxW, maxFs, minFs = 9) {
+    let fs = fitSize(s, maxW, maxFs, minFs), t = String(s);
+    while (t.length > 2 && textWidth(t, fs) > maxW) t = t.slice(0, -2) + "…";
+    return { s: t, fs };
+  }
+  // 安全領域：横長 300×100 の 8%（左右 24、上下 8）。すべての図形と文字をこの中に収める
+  const SAFE = { x0: 24, x1: 276, y0: 8, y1: 92 };
 
   /**
    * ロゴの SVG。横長（viewBox 300×100）。monogram だけ正方形（100×100）。
@@ -70,61 +78,93 @@
     const fnt = FONTS.find(f => f[0] === spec.font) || FONTS[0];
     const [, , main, sub, ink] = pal;
     const family = fnt[2], weight = fnt[3];
-    const T = (x, y, s, fs, fill, anchor = "start", extra = "") => `<text x="${x}" y="${y}" font-size="${fs}" font-weight="${weight}" fill="${fill}" text-anchor="${anchor}" dominant-baseline="central" style="font-family:${esc(family)}"${extra}>${esc(s)}</text>`;
-    const ini = initials, iniFs = ini.length > 1 ? 34 : 44;
+    const T = (x, y, s, fs, fill, anchor = "start", fam = family, extra = "") => `<text x="${x}" y="${y}" font-size="${fs}" font-weight="${weight}" fill="${fill}" text-anchor="${anchor}" dominant-baseline="central" style="font-family:${esc(fam)}"${extra}>${esc(s)}</text>`;
+    const ini = initials.slice(0, 2);
+    const { x0, x1 } = SAFE;
+    // バッジ（左の図形）の寸法：中心 58、半径 34 → 24..92。屋号は 104 から右端まで
+    const BC = 58, BR = 34, NX = 104, NW = x1 - NX;
+    const iniIn = (box, max) => fitSize(ini, box, max);          // 図形の中の頭文字
     let inner = "", vb = "0 0 300 100";
     switch (spec.template) {
       case "badge-square": {
-        const fs = fitSize(core, 190, 30);
-        inner = `<rect x="8" y="14" width="72" height="72" rx="18" fill="${main}"/>${T(44, 51, ini, iniFs, "#fff", "middle")}${T(96, 50, core, fs, ink)}`; break;
+        const nm = fitText(core, NW, 30), fs = nm.fs, ifs = iniIn(BR * 2 - 10, 40);
+        inner = `<rect x="${BC - BR}" y="${50 - BR}" width="${BR * 2}" height="${BR * 2}" rx="16" fill="${main}"/>${T(BC, 51, ini, ifs, "#fff", "middle")}${T(NX, 50, nm.s, fs, ink)}`; break;
       }
       case "wordmark": {
-        const fs = fitSize(core, 270, 40); const w = Math.min(270, textWidth(core, fs));
-        inner = `${T(150, 44, core, fs, main, "middle")}<rect x="${150 - w / 2}" y="70" width="${w}" height="6" rx="3" fill="${sub}"/>`; break;
+        const nm = fitText(core, x1 - x0, 40), fs = nm.fs; const w = Math.min(x1 - x0, textWidth(nm.s, fs));
+        inner = `${T(150, 44, nm.s, fs, main, "middle")}<rect x="${(150 - w / 2).toFixed(1)}" y="70" width="${w.toFixed(1)}" height="6" rx="3" fill="${sub}"/>`; break;
       }
       case "wordmark-frame": {
-        const fs = fitSize(core, 230, 32);
-        inner = `<rect x="10" y="16" width="280" height="68" rx="12" fill="none" stroke="${main}" stroke-width="4"/>${T(150, 50, core, fs, main, "middle")}`; break;
+        const nm = fitText(core, x1 - x0 - 40, 32), fs = nm.fs;
+        inner = `<rect x="${x0}" y="16" width="${x1 - x0}" height="68" rx="12" fill="none" stroke="${main}" stroke-width="4"/>${T(150, 50, nm.s, fs, main, "middle")}`; break;
       }
       case "initial-stack": {
-        const fs = fitSize(core, 190, 26);
-        inner = `${T(44, 50, ini, 56, main, "middle")}<rect x="86" y="24" width="2" height="52" fill="${sub}"/>${T(100, 40, core, fs, ink)}<rect x="100" y="62" width="${Math.min(190, textWidth(core, fs))}" height="3" fill="${sub}"/>`; break;
+        // 頭文字は左の 24..100 に収め、仕切り線は 108、屋号は 118 から
+        const ifs = fitSize(ini, 72, 54), nm = fitText(core, x1 - 118, 26), fs = nm.fs;
+        const nw = Math.min(x1 - 118, textWidth(nm.s, fs));
+        inner = `${T(62, 50, ini, ifs, main, "middle")}<rect x="107" y="26" width="2" height="48" fill="${sub}"/>${T(118, 42, nm.s, fs, ink)}<rect x="118" y="60" width="${nw.toFixed(1)}" height="3" fill="${sub}"/>`; break;
       }
       case "wafu-rakkan": {
-        // 和風：明朝の屋号＋右に小さな朱の落款（頭文字）。筆文字・判子の需要（ココナラ・Canva の和風テンプレ）に合わせる
+        // 和風：明朝の屋号＋右に小さな朱の落款（頭文字）。筆文字・判子の需要に合わせる
         const fam = FONTS[2][2];
-        const fs = fitSize(core, 210, 34);
-        const w = Math.min(210, textWidth(core, fs));
-        const x0 = 150 - (w + 34) / 2;
-        inner = `<text x="${x0}" y="52" font-size="${fs}" font-weight="700" fill="${ink}" text-anchor="start" dominant-baseline="central" style="font-family:${esc(fam)};letter-spacing:2px">${esc(core)}</text>`
-          + `<rect x="${x0 + w + 10}" y="36" width="26" height="26" rx="2" fill="${sub === "#888888" ? "#C0392B" : sub}"/>`
-          + `<text x="${x0 + w + 23}" y="49.5" font-size="${ini.length > 1 ? 11 : 17}" font-weight="700" fill="#fff" text-anchor="middle" dominant-baseline="central" style="font-family:${esc(fam)}">${esc(ini.slice(0, 2))}</text>`; break;
+        const ls = core.length <= 8 ? 2 : 0;                     // 字間は短い屋号だけ
+        const nm = fitText(core, x1 - x0 - 38 - ls * core.length, 34), fs = nm.fs;
+        const w = textWidth(nm.s, fs) + ls * nm.s.length;
+        const sx = 150 - (w + 38) / 2;
+        inner = `${T(sx.toFixed(1), 52, nm.s, fs, ink, "start", fam, ls ? ' letter-spacing="2"' : "")}`
+          + `<rect x="${(sx + w + 12).toFixed(1)}" y="37" width="26" height="26" rx="2" fill="${sub === "#888888" ? "#C0392B" : sub}"/>`
+          + `${T((sx + w + 25).toFixed(1), 50.5, ini, ini.length > 1 ? 11 : 17, "#fff", "middle", fam)}`; break;
       }
       case "inverse": {
-        const fs = fitSize(core, 250, 34);
-        inner = `<rect x="4" y="12" width="292" height="76" rx="14" fill="${main}"/>${T(150, 50, core, fs, "#fff", "middle")}`; break;
+        const nm = fitText(core, x1 - x0 - 30, 34), fs = nm.fs;
+        inner = `<rect x="${x0}" y="12" width="${x1 - x0}" height="76" rx="14" fill="${main}"/>${T(150, 50, nm.s, fs, "#fff", "middle")}`; break;
       }
       case "line-frame": {
-        const fs = fitSize(core, 210, 30); const w = Math.min(210, textWidth(core, fs));
-        inner = `${T(150, 50, core, fs, ink, "middle")}<rect x="${150 - w / 2 - 34}" y="48.5" width="24" height="3" fill="${main}"/><rect x="${150 + w / 2 + 10}" y="48.5" width="24" height="3" fill="${main}"/><rect x="${150 - w / 2 - 28}" y="46" width="8" height="8" transform="rotate(45 ${150 - w / 2 - 24} 50)" fill="${sub}"/><rect x="${150 + w / 2 + 20}" y="46" width="8" height="8" transform="rotate(45 ${150 + w / 2 + 24} 50)" fill="${sub}"/>`; break;
+        const nm = fitText(core, x1 - x0 - 88, 30), fs = nm.fs; const w = Math.min(x1 - x0 - 88, textWidth(nm.s, fs));
+        const l = 150 - w / 2 - 12, r = 150 + w / 2 + 12;   // 文字の外側に 12 あけて線 24 と菱形
+        inner = `${T(150, 50, nm.s, fs, ink, "middle")}<rect x="${(l - 24).toFixed(1)}" y="48.5" width="24" height="3" fill="${main}"/><rect x="${r.toFixed(1)}" y="48.5" width="24" height="3" fill="${main}"/>`
+          + `<rect x="${(l - 30).toFixed(1)}" y="46" width="8" height="8" transform="rotate(45 ${(l - 26).toFixed(1)} 50)" fill="${sub}"/><rect x="${(r + 22).toFixed(1)}" y="46" width="8" height="8" transform="rotate(45 ${(r + 26).toFixed(1)} 50)" fill="${sub}"/>`; break;
       }
       case "hexagon": {
-        const fs = fitSize(core, 190, 30);
-        const pts = Array.from({ length: 6 }, (_, k) => { const a = Math.PI / 3 * k - Math.PI / 6; return `${(46 + 40 * Math.cos(a)).toFixed(1)},${(50 + 40 * Math.sin(a)).toFixed(1)}`; }).join(" ");
-        inner = `<polygon points="${pts}" fill="${main}"/>${T(46, 51, ini, iniFs, "#fff", "middle")}${T(96, 50, core, fs, ink)}`; break;
+        const nm = fitText(core, NW, 30), fs = nm.fs, ifs = iniIn(BR * 2 - 14, 38);
+        const pts = Array.from({ length: 6 }, (_, k) => { const a = Math.PI / 3 * k - Math.PI / 6; return `${(BC + BR * Math.cos(a)).toFixed(1)},${(50 + BR * Math.sin(a)).toFixed(1)}`; }).join(" ");
+        inner = `<polygon points="${pts}" fill="${main}"/>${T(BC, 51, ini, ifs, "#fff", "middle")}${T(NX, 50, nm.s, fs, ink)}`; break;
       }
       case "monogram": {
         vb = "0 0 100 100";
-        inner = `<circle cx="50" cy="50" r="46" fill="${main}"/>${T(50, 51, ini, ini.length > 1 ? 40 : 52, "#fff", "middle")}`; break;
+        const ifs = fitSize(ini, 60, 52);
+        inner = `<circle cx="50" cy="50" r="42" fill="${main}"/>${T(50, 51, ini, ifs, "#fff", "middle")}`; break;
       }
       default: {   // badge-circle
-        const fs = fitSize(core, 190, 30);
-        inner = `<circle cx="46" cy="50" r="38" fill="${main}"/>${T(46, 51, ini, iniFs, "#fff", "middle")}${T(96, 50, core, fs, ink)}`;
+        const nm = fitText(core, NW, 30), fs = nm.fs, ifs = iniIn(BR * 2 - 14, 40);
+        inner = `<circle cx="${BC}" cy="50" r="${BR}" fill="${main}"/>${T(BC, 51, ini, ifs, "#fff", "middle")}${T(NX, 50, nm.s, fs, ink)}`;
       }
     }
     return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${vb}" role="img" aria-label="${esc(core)}">${inner}</svg>`;
   }
 
-  const api = { PALETTES, FONTS, TEMPLATES, nameParts, randomSpec, logoSvg, textWidth };
+  // 生成した SVG の外接枠を見積もる（試験用：すべての図形・文字が安全領域に収まるか）
+  function logoBounds(svg) {
+    let b = { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity };
+    const add = (x0, y0, x1, y1) => { b = { x0: Math.min(b.x0, x0), y0: Math.min(b.y0, y0), x1: Math.max(b.x1, x1), y1: Math.max(b.y1, y1) }; };
+    const attr = (tag, k) => { const m = tag.match(new RegExp(` ${k}="([^"]*)"`)); return m ? m[1] : ""; };
+    (svg.match(/<rect [^>]*>/g) || []).forEach(t => {
+      const x = +attr(t, "x"), y = +attr(t, "y"), w = +attr(t, "width"), h = +attr(t, "height");
+      const rot = attr(t, "transform").match(/rotate\(45 ([\d.]+) ([\d.]+)\)/);
+      if (rot) { const cx = +rot[1], cy = +rot[2], d = Math.hypot(w, h) / 2; add(cx - d, cy - d, cx + d, cy + d); } else add(x, y, x + w, y + h);
+    });
+    (svg.match(/<circle [^>]*>/g) || []).forEach(t => { const cx = +attr(t, "cx"), cy = +attr(t, "cy"), r = +attr(t, "r"); add(cx - r, cy - r, cx + r, cy + r); });
+    (svg.match(/<polygon [^>]*>/g) || []).forEach(t => attr(t, "points").split(" ").forEach(pt => { const [x, y] = pt.split(",").map(Number); add(x, y, x, y); }));
+    (svg.match(/<text [^>]*>[^<]*<\/text>/g) || []).forEach(t => {
+      const x = +attr(t, "x"), y = +attr(t, "y"), fs = +attr(t, "font-size"), anchor = attr(t, "text-anchor");
+      const text = t.replace(/<[^>]+>/g, "").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&").replace(/&quot;/g, '"');
+      const w = textWidth(text, fs) + (+(attr(t, "letter-spacing") || 0)) * text.length;
+      const left = anchor === "middle" ? x - w / 2 : anchor === "end" ? x - w : x;
+      add(left, y - fs / 2, left + w, y + fs / 2);
+    });
+    return b;
+  }
+
+  const api = { PALETTES, FONTS, TEMPLATES, SAFE, nameParts, randomSpec, logoSvg, logoBounds, textWidth };
   if (typeof module !== "undefined" && module.exports) module.exports = api; else root.SeikyushoLogo = api;
 })(typeof window !== "undefined" ? window : globalThis);
