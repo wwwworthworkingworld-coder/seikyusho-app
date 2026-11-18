@@ -110,6 +110,12 @@
         <div>
           <label>印影 <small>発行者欄の右に重なります</small></label>
           <div class="chips" id="sealChips"></div>
+          <div id="sealOpts" class="seal-opts" hidden>
+            <div class="chips" id="sealShapeChips"></div>
+            <div class="chips" id="sealFontChips"></div>
+            <input id="sealText" type="text" maxlength="16" placeholder="印影の文字（屋号・会社名）">
+            <label class="switch" id="sealNoinRow"><span>末尾に「之印」を付ける <small>角印の一般的な形（株式会社○○之印）</small></span><input id="sealNoin" type="checkbox"></label>
+          </div>
           <div class="seal-preview" id="sealPreview" hidden></div>
           <input id="sealFile" type="file" accept="image/*" hidden>
         </div>
@@ -184,7 +190,7 @@
 <!-- プレビュー（A4 を縮小） -->
 <div class="sheet-modal" id="previewModal" hidden>
   <div class="sm-bar"><button type="button" class="sm-close" id="previewClose">閉じる</button><span>プレビュー</span><span class="sm-pages" id="previewInfo"></span></div>
-  <div class="sm-body" id="previewBody"><div class="sm-scale" id="previewScale"></div></div>
+  <div class="sm-body" id="previewBody"><div class="sm-wrap" id="previewWrap"><div class="sm-scale" id="previewScale"></div></div></div>
   <div class="sm-foot">
     <div class="chips" id="previewColors"></div>
     <button class="primary" type="button" id="pdfBtn2">PDF にする</button>

@@ -23,10 +23,12 @@
 .sheet .me{margin-top:3mm;padding-right:24mm}
 .sheet .me b{font-size:11.5pt}
 .sheet .logo{max-width:40mm;max-height:14mm;display:block;margin-bottom:2mm}
-.sheet .seal{position:absolute;right:0;top:9mm;width:21mm;height:21mm}
-.sheet .seal img{width:21mm;height:21mm;object-fit:contain;mix-blend-mode:multiply}
-.sheet .seal-text{width:21mm;height:21mm;border:1.2pt solid #d1352b;border-radius:50%;color:#d1352b;display:flex;flex-direction:column;align-items:center;justify-content:center;font-weight:700;line-height:1.05;letter-spacing:.05em;opacity:.9}
+.sheet .seal{position:absolute;right:0;top:9mm;width:22mm;height:22mm}
+.sheet .seal img{width:22mm;height:22mm;object-fit:contain;mix-blend-mode:multiply}
+.sheet .seal-text{box-sizing:border-box;width:22mm;height:22mm;border:1.3pt solid #d1352b;border-radius:50%;color:#d1352b;display:flex;flex-direction:column;align-items:center;justify-content:center;font-weight:700;line-height:1.02;letter-spacing:0;padding:0.6mm;opacity:.92;overflow:hidden}
 .sheet .seal-text span{display:block;white-space:nowrap}
+.sheet .seal-text.square{border-radius:1pt;flex-direction:row-reverse;align-items:center;justify-content:center;padding:1mm;line-height:1.0}
+.sheet .seal-text.square span{display:block;writing-mode:vertical-rl;text-orientation:upright;white-space:nowrap;margin:0 0.3mm;letter-spacing:0.02em}
 .sheet .amount{margin:6mm 0 4mm;font-size:11pt;font-weight:700;display:flex;align-items:flex-end;gap:4mm}
 .sheet .amount b{font-size:20pt;border-bottom:1.5pt solid #333;min-width:70mm;padding:0 2mm 0.5mm;text-align:right;font-variant-numeric:tabular-nums}
 .sheet .amount small{font-weight:400;font-size:9pt}
@@ -58,10 +60,23 @@
     if (!seal || seal.type === "none") return "";
     if (seal.type === "image" && seal.data) return `<div class="seal"><img src="${esc(seal.data)}" alt=""></div>`;
     if (seal.type === "text") {
+      const font = (C.SEAL_FONTS.find(f => f[0] === seal.font) || C.SEAL_FONTS[0])[2];
+      if (seal.shape === "square") {
+        const txt = C.sealSquareText(seal.text, seal.noin !== false);
+        if (!txt) return "";
+        // 角印：縦書き。文字数で列数と大きさを決める（1 列 4〜5 文字）
+        const cols = Math.max(1, Math.ceil(txt.length / 5));
+        const per = Math.ceil(txt.length / cols);
+        const colsHtml = Array.from({ length: cols }, (_, i) => `<span>${esc(txt.slice(i * per, (i + 1) * per))}</span>`).join("");
+        const size = per <= 3 ? 15 : per <= 4 ? 12.5 : per <= 5 ? 10.5 : 9;
+        return `<div class="seal"><div class="seal-text square" style="font-size:${size}pt;font-family:${font}">${colsHtml}</div></div>`;
+      }
       const lines = C.sealLines(seal.text || "");
       if (!lines.length) return "";
-      const size = lines.length === 1 ? 11 : lines.length === 2 ? 9 : 7.5;
-      return `<div class="seal"><div class="seal-text" style="font-size:${size}pt">${lines.map(l => `<span>${esc(l)}</span>`).join("")}</div></div>`;
+      const longest = Math.max(...lines.map(l => l.length));
+      // 丸印：行数と 1 行の文字数から、枠いっぱいに近い大きさにする
+      const size = lines.length === 1 ? (longest <= 2 ? 20 : 16) : lines.length === 2 ? (longest <= 2 ? 15 : 12.5) : lines.length === 3 ? 10.5 : 8.5;
+      return `<div class="seal"><div class="seal-text" style="font-size:${size}pt;font-family:${font}">${lines.map(l => `<span>${esc(l)}</span>`).join("")}</div></div>`;
     }
     return "";
   }

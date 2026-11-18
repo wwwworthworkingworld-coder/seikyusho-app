@@ -110,15 +110,18 @@
     return current.concat(incoming.filter(d => !have.has(d.kind + "|" + d.no)));
   }
 
-  // 丸印：屋号・名前を 1〜3 行に割る（印影を文字から作るとき）
+  // 印影の文字割り：屋号・名前を 1〜4 行に割る（「株式会社」などの法人格は省かない。会社の印は法人格を含めるのが一般的）
+  // 3 文字以下 1 行、6 以下 2 行、9 以下 3 行、それ以上 4 行（16 文字まで）
   function sealLines(name) {
-    const s = String(name || "").replace(/\s+/g, "").replace(/株式会社|有限会社|合同会社/g, "");
+    const s = String(name || "").replace(/\s+/g, "").slice(0, 16);
     if (!s) return [];
-    if (s.length <= 3) return [s];
-    if (s.length <= 6) return [s.slice(0, Math.ceil(s.length / 2)), s.slice(Math.ceil(s.length / 2))];
-    const n = Math.ceil(s.length / 3);
-    return [s.slice(0, n), s.slice(n, 2 * n), s.slice(2 * n, 3 * n)].filter(Boolean).map(x => x.slice(0, 4));
+    const n = s.length <= 3 ? 1 : s.length <= 6 ? 2 : s.length <= 9 ? 3 : 4;
+    const per = Math.ceil(s.length / n);
+    return Array.from({ length: n }, (_, i) => s.slice(i * per, (i + 1) * per)).filter(Boolean);
   }
+  // 角印の文字：縦書きで右の列から読む。「之印」を付けるときは末尾に足す
+  const sealSquareText = (name, noin) => { const s = String(name || "").replace(/\s+/g, "").slice(0, 16); return s ? s + (noin ? "之印" : "") : ""; };
+  const SEAL_FONTS = [["mincho", "明朝", '"Hiragino Mincho ProN","Hiragino Mincho Pro","Yu Mincho","YuMincho","MS Mincho",serif'], ["gothic", "ゴシック", '"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic","Meiryo",sans-serif'], ["maru", "丸ゴシック", '"Hiragino Maru Gothic ProN","Hiragino Maru Gothic Pro","Yu Gothic","Meiryo",sans-serif']];
 
   // 一覧：月ごとにまとめる（新しい月が先）。請求書は差引額、それ以外は税込
   function groupByMonth(docs, opt) {
@@ -165,6 +168,6 @@
     return bad;
   }
 
-  const api = { KINDS, PREFIX, FREE_DOCS, COLORS, WH_LIMIT, roundBy, lineAmount, calc, shownAmount, nextNo, defaultDue, isRegNo, normalizeRegNo, convert, canCreate, freeLeft, backup, restore, mergeDocs, sealLines, groupByMonth, recentClients, recentItems, shouldAskReview, backupWarning, validate, fmtDate, yen };
+  const api = { KINDS, PREFIX, FREE_DOCS, COLORS, WH_LIMIT, roundBy, lineAmount, calc, shownAmount, nextNo, defaultDue, isRegNo, normalizeRegNo, convert, canCreate, freeLeft, backup, restore, mergeDocs, sealLines, sealSquareText, SEAL_FONTS, groupByMonth, recentClients, recentItems, shouldAskReview, backupWarning, validate, fmtDate, yen };
   if (typeof module !== "undefined" && module.exports) module.exports = api; else root.SeikyushoCore = api;
 })(typeof window !== "undefined" ? window : globalThis);

@@ -116,12 +116,15 @@ t("復元の「追加」は同じ種類・番号を重ねない", () => {
 });
 
 // ---- 丸印・一覧・履歴
-t("丸印の文字割り：3 文字以下 1 行、6 文字以下 2 行、それ以上 3 行。会社の種類は省く", () => {
+t("印影の文字割り：法人格は省かない。3 文字以下 1 行、6 以下 2 行、9 以下 3 行、それ以上 4 行", () => {
   assert.deepStrictEqual(C.sealLines("山田"), ["山田"]);
   assert.deepStrictEqual(C.sealLines("サンプル工房"), ["サンプ", "ル工房"]);
-  assert.deepStrictEqual(C.sealLines("株式会社見本商事"), ["見本", "商事"]);
-  assert.deepStrictEqual(C.sealLines("みほんデザイン事務所"), ["みほんデ", "ザイン事", "務所"]);
+  assert.deepStrictEqual(C.sealLines("株式会社見本商事"), ["株式会", "社見本", "商事"]);
+  assert.deepStrictEqual(C.sealLines("合同会社みほんデザイン事務所"), ["合同会社", "みほんデ", "ザイン事", "務所"]);
   assert.deepStrictEqual(C.sealLines(""), []);
+  assert.strictEqual(C.sealSquareText("株式会社見本商事", true), "株式会社見本商事之印");
+  assert.strictEqual(C.sealSquareText("見本商事", false), "見本商事");
+  assert.strictEqual(C.SEAL_FONTS.length, 3);
 });
 t("月ごとの一覧：新しい月が先、請求書は差引額で合計", () => {
   const docs = [
@@ -186,8 +189,10 @@ t("書類の HTML：印影・ロゴ・色が反映され、HTML の特殊文字�
   const h = P.paperHtml(Object.assign({}, DOC, { to: "<script>x</script>見本" }), ME, { color: "wine", seal: { type: "image", data: "data:image/png;base64,AAAA" }, logo: "data:image/png;base64,BBBB" });
   assert.ok(!h.includes("<script>x")); assert.ok(h.includes("&lt;script&gt;"));
   assert.ok(h.includes("data:image/png;base64,AAAA")); assert.ok(h.includes("data:image/png;base64,BBBB")); assert.ok(h.includes("#8b2942"));
-  const h2 = P.paperHtml(DOC, ME, { seal: { type: "text", text: "サンプル工房" } });
-  assert.ok(h2.includes("seal-text")); assert.ok(h2.includes("サンプ"));
+  const h2 = P.paperHtml(DOC, ME, { seal: { type: "text", text: "株式会社サンプル工房", font: "mincho" } });
+  assert.ok(h2.includes("seal-text")); assert.ok(h2.includes("株式会")); assert.ok(h2.includes("Hiragino Mincho"));
+  const h3 = P.paperHtml(DOC, ME, { seal: { type: "text", text: "株式会社見本商事", shape: "square", font: "gothic" } });
+  assert.ok(h3.includes("seal-text square")); assert.ok(h3.includes("之印")); assert.ok(h3.includes("Hiragino Sans"));
 });
 t("書類の HTML を PDF 用の 1 ページ文書に包む（A4・余白・フォント）", () => {
   const full = P.pdfDocument(P.paperHtml(DOC, ME, {}));

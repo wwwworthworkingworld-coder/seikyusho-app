@@ -246,24 +246,48 @@
 
   // ---- プレビュー・PDF
   let previewing = false;
+  let zoom = 1, baseScale = 1;
+  function layoutPreview() {
+    const scale = $("previewScale"), wrap = $("previewWrap");
+    const pxPerMm = 96 / 25.4, sheetW = 210 * pxPerMm;
+    const s = baseScale * zoom;
+    const h = Math.max(297 * pxPerMm, scale.firstElementChild ? scale.firstElementChild.offsetHeight : 0);
+    scale.style.transform = `scale(${s})`; scale.style.width = sheetW + "px";
+    // 拡大した分だけ外枠を広げて、指でスクロールできるようにする
+    wrap.style.width = Math.round(sheetW * s) + "px"; wrap.style.height = Math.round(h * s) + "px";
+    $("previewInfo").textContent = zoom > 1.05 ? `A4 ×${zoom.toFixed(1)}` : "A4";
+  }
   function renderPreview() {
     const scale = $("previewScale");
     scale.innerHTML = Paper.paperHtml(cur, data.me, paperOpt());
     const w = $("previewBody").clientWidth - 24;
-    const pxPerMm = 96 / 25.4, sheetW = 210 * pxPerMm, sheetH = 297 * pxPerMm;
-    const s = Math.min(1, w / sheetW);
-    scale.style.transform = `scale(${s})`; scale.style.width = sheetW + "px";
-    scale.style.height = "auto"; scale.style.marginBottom = `calc(${(Math.max(sheetH, scale.firstElementChild.offsetHeight)) * (s - 1)}px + 12px)`;
-    $("previewInfo").textContent = "A4";
+    baseScale = Math.min(1, w / (210 * 96 / 25.4));
+    layoutPreview();
     $("stampNote").hidden = !(cur.kind === "領収書" && C.shownAmount(cur, C.calc(cur.lines, calcOpt(cur))) >= 50000);
     chips($("previewColors"), C.COLORS.map(([k, label, hex]) => [k, `<span class="sw" style="background:${hex}"></span>${label}`, purchased ? "" : "lock"]), paperOpt().color, k => {
       if (!purchased) { openPay("色テンプレは購入後に使えます"); return; }
       data.settings.color = k; save(); renderPreview();
     });
   }
+  // 指 2 本で拡大・縮小（1〜4 倍）。ダブルタップで 2 倍⇔元に戻す。PDF の見た目には影響しない
+  (() => {
+    const body = $("previewBody");
+    let d0 = 0, z0 = 1, lastTap = 0;
+    const dist = t => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+    body.addEventListener("touchstart", e => {
+      if (e.touches.length === 2) { d0 = dist(e.touches); z0 = zoom; }
+      else if (e.touches.length === 1) { const now = Date.now(); if (now - lastTap < 300) { zoom = zoom > 1.05 ? 1 : 2; layoutPreview(); } lastTap = now; }
+    }, { passive: true });
+    body.addEventListener("touchmove", e => {
+      if (e.touches.length !== 2 || !d0) return;
+      e.preventDefault();
+      zoom = Math.min(4, Math.max(1, z0 * dist(e.touches) / d0)); layoutPreview();
+    }, { passive: false });
+    body.addEventListener("touchend", e => { if (e.touches.length < 2) d0 = 0; }, { passive: true });
+  })();
   function openPreview() {
     const bad = C.validate(cur, data.me); if (bad.length) { toast(bad[0]); return; }
-    previewing = true; $("previewModal").hidden = false; renderPreview();
+    previewing = true; zoom = 1; $("previewModal").hidden = false; renderPreview();
   }
   $("previewBtn").onclick = openPreview;
   $("previewClose").onclick = () => { previewing = false; $("previewModal").hidden = true; };
@@ -299,14 +323,27 @@
     $("lookNote").textContent = purchased ? "" : "購入すると使えます";
     chips($("colorChips"), C.COLORS.map(([k, label, hex]) => [k, `<span class="sw" style="background:${hex}"></span>${label}`, purchased ? "" : "lock"]), s.color, k => { if (!purchased) { openPay("色テンプレは購入後に使えます"); return; } s.color = k; save(); renderSettings(); });
     const sealType = purchased ? ((s.seal && s.seal.type) || "none") : "none";
-    chips($("sealChips"), [["none", "なし"], ["text", "屋号から丸印を作る", purchased ? "" : "lock"], ["image", "写真から選ぶ", purchased ? "" : "lock"]], sealType, async t => {
+    chips($("sealChips"), [["none", "なし"], ["text", "文字から作る", purchased ? "" : "lock"], ["image", "写真から選ぶ", purchased ? "" : "lock"]], sealType, async t => {
       if (t !== "none" && !purchased) { openPay("印影・ロゴは購入後に使えます"); return; }
       if (t === "none") { s.seal = { type: "none" }; save(); renderSettings(); return; }
-      if (t === "text") { if (!m.name) { toast("先に屋号・名前を入れてください"); return; } s.seal = { type: "text", text: m.name }; save(); renderSettings(); return; }
+      if (t === "text") {
+        s.seal = Object.assign({ type: "text", text: m.name || "", shape: "round", font: "mincho", noin: true }, s.seal && s.seal.type === "text" ? s.seal : {});
+        if (!s.seal.text) s.seal.text = m.name || "";
+        save(); renderSettings(); return;
+      }
       $("sealFile").click();
     });
-    const sp = $("sealPreview"); sp.hidden = sealType === "none";
-    if (sealType !== "none") { sp.innerHTML = `<div class="sheet" style="all:unset">${Paper.paperHtml({ kind: "請求書", lines: [] }, {}, { seal: s.seal }).match(/<div class="seal">[\s\S]*?<\/div>\s*<\/div>/)?.[0] || ""}</div>`; sp.querySelectorAll(".seal").forEach(e => { e.style.position = "static"; }); }
+    $("sealOpts").hidden = sealType !== "text";
+    if (sealType === "text") {
+      const sl = s.seal;
+      chips($("sealShapeChips"), [["round", "丸印"], ["square", "角印"]], sl.shape || "round", v => { sl.shape = v; save(); renderSettings(); });
+      chips($("sealFontChips"), C.SEAL_FONTS.map(([k, label]) => [k, label]), sl.font || "mincho", v => { sl.font = v; save(); renderSettings(); });
+      $("sealText").value = sl.text || "";
+      $("sealNoinRow").hidden = (sl.shape || "round") !== "square";
+      $("sealNoin").checked = sl.noin !== false;
+    }
+    $("sealPreview").hidden = sealType === "none";
+    if (sealType !== "none") renderSealPreview();
     chips($("logoChips"), [["none", "なし"], ["image", "写真から選ぶ", purchased ? "" : "lock"]], s.logo ? "image" : "none", t => {
       if (t === "image" && !purchased) { openPay("印影・ロゴは購入後に使えます"); return; }
       if (t === "none") { s.logo = ""; save(); renderSettings(); return; }
@@ -330,9 +367,17 @@
     $("lastBackup").textContent = s.lastBackup ? `最後のバックアップ：${new Date(s.lastBackup).toLocaleDateString("ja-JP")}` : "まだバックアップを書き出していません。";
     renderBuy();
   }
-  ["me_name", "me_addr", "me_tel", "me_mail", "me_reg", "me_bank"].forEach(k => { $(k).addEventListener("input", () => { data.me[k.slice(3)] = $(k).value; if (k === "me_reg") $("regErr").hidden = !data.me.reg || C.isRegNo(data.me.reg); if (k === "me_name" && data.settings.seal && data.settings.seal.type === "text") data.settings.seal.text = data.me.name; save(); }); });
+  ["me_name", "me_addr", "me_tel", "me_mail", "me_reg", "me_bank"].forEach(k => { $(k).addEventListener("input", () => { data.me[k.slice(3)] = $(k).value; if (k === "me_reg") $("regErr").hidden = !data.me.reg || C.isRegNo(data.me.reg); if (k === "me_name" && data.settings.seal && data.settings.seal.type === "text" && !data.settings.seal.userText) { data.settings.seal.text = data.me.name; if (!$("tab-settings").hidden) { $("sealText").value = data.me.name; renderSealPreview(); } } save(); }); });
   $("me_reg").addEventListener("blur", () => { data.me.reg = C.normalizeRegNo(data.me.reg); $("me_reg").value = data.me.reg; $("regErr").hidden = !data.me.reg || C.isRegNo(data.me.reg); save(); });
   $("yearInNo").onchange = () => { data.settings.yearInNo = $("yearInNo").checked; save(); };
+  function renderSealPreview() {
+    const sp = $("sealPreview");
+    const m = Paper.paperHtml({ kind: "請求書", lines: [] }, {}, { seal: data.settings.seal }).match(/<div class="seal">[\s\S]*?<\/div>\s*<\/div>/);
+    sp.innerHTML = `<div class="sheet" style="all:unset">${m ? m[0] : ""}</div>`;
+    sp.querySelectorAll(".seal").forEach(e => { e.style.position = "static"; });
+  }
+  $("sealText").addEventListener("input", () => { const sl = data.settings.seal; if (sl && sl.type === "text") { sl.text = $("sealText").value; sl.userText = true; save(); renderSealPreview(); } });
+  $("sealNoin").onchange = () => { const sl = data.settings.seal; if (sl && sl.type === "text") { sl.noin = $("sealNoin").checked; save(); renderSealPreview(); } };
   $("addRate").onclick = () => {
     const r = Number($("newRate").value); if (!(r >= 0 && r <= 100)) { toast("0〜100 の数で入れてください"); return; }
     if (!data.settings.rates.includes(r)) data.settings.rates.push(r);
