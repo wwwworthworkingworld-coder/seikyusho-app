@@ -18,7 +18,7 @@ jobs:
         with:
           distribution: temurin
           java-version: 21
-      - uses: android-actions/setup-android@v3
+      # ubuntu-latest には Android SDK が入っている（ANDROID_HOME 設定済み）。setup-android は不要
       - run: npm ci
       - name: 計算処理と書類の試験
         run: node test/core.test.js

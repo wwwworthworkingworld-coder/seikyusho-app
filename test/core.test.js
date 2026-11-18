@@ -2,6 +2,7 @@
 const assert = require("assert");
 const C = require("../www/core.js");
 const P = require("../www/paper.js");
+const Lg = require("../www/logo.js");
 
 let n = 0;
 const t = (name, f) => { f(); n++; console.log("ok  " + name); };
@@ -215,6 +216,33 @@ t("書類の HTML を PDF 用の 1 ページ文書に包む（A4・余白・フ�
 t("ファイル名：種類_番号_取引先.pdf、使えない文字は除く", () => {
   assert.strictEqual(P.pdfFileName(DOC), "請求書_I-2026-001_見本商事.pdf");
   assert.strictEqual(P.pdfFileName(Object.assign({}, DOC, { to: "見本/商事:株" })), "請求書_I-2026-001_見本商事株.pdf");
+});
+
+// ---- ロゴの自動生成
+t("ロゴ：法人格を除いた本体と頭文字（英字は単語の頭、和文は先頭 1〜2 字）", () => {
+  assert.deepStrictEqual([Lg.nameParts("株式会社見本商事").core, Lg.nameParts("株式会社見本商事").initials], ["見本商事", "見本"]);
+  assert.deepStrictEqual([Lg.nameParts("Sample Works LLC").core, Lg.nameParts("Sample Works LLC").initials], ["Sample Works LLC", "SW"]);
+  assert.strictEqual(Lg.nameParts("山田").initials, "山");
+  assert.strictEqual(Lg.nameParts("").core, "");
+});
+t("ロゴ：型 10 種・色 6・書体 3。どの組み合わせでも屋号を含む SVG になり、特殊文字は無害化", () => {
+  assert.strictEqual(Lg.TEMPLATES.length, 10); assert.strictEqual(Lg.PALETTES.length, 6); assert.strictEqual(Lg.FONTS.length, 3);
+  Lg.TEMPLATES.forEach(([tp]) => Lg.PALETTES.forEach(([pl]) => Lg.FONTS.forEach(([f]) => {
+    const s = Lg.logoSvg("株式会社サンプル工房", { template: tp, palette: pl, font: f, seed: 1 });
+    assert.ok(s.startsWith("<svg") && s.endsWith("</svg>"), tp);
+    assert.ok(tp === "monogram" ? s.includes(">サン<") : s.includes("サンプル工房"), tp + " " + pl);
+  })));
+  const s = Lg.logoSvg("<b>見本</b>", { template: "wordmark" });
+  assert.ok(!s.includes("<b>") && s.includes("&lt;b&gt;"));
+  assert.strictEqual(Lg.logoSvg("", {}), "");
+});
+t("ロゴ：同じ seed なら同じ案、違う seed なら別の案が出る。長い屋号は文字が小さくなる", () => {
+  assert.deepStrictEqual(Lg.randomSpec(42), Lg.randomSpec(42));
+  const specs = new Set(Array.from({ length: 30 }, (_, i) => JSON.stringify(Lg.randomSpec(i + 1))));
+  assert.ok(specs.size > 10);
+  const short = Lg.logoSvg("見本", { template: "wordmark" }).match(/font-size="(\d+)"/)[1];
+  const long = Lg.logoSvg("とても長い屋号のデザイン事務所サンプル", { template: "wordmark" }).match(/font-size="(\d+)"/)[1];
+  assert.ok(+long < +short);
 });
 
 console.log(`\n${n} 件すべて合格`);
