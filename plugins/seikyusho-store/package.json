@@ -3,5 +3,12 @@
   "version": "1.0.0",
   "private": true,
   "description": "アプリ内課金（StoreKit 2）。無制限・印影・テンプレの買い切り",
-  "capacitor": { "ios": { "src": "ios" } }
+  "capacitor": {
+    "ios": {
+      "src": "ios"
+    },
+    "android": {
+      "src": "android"
+    }
+  }
 }

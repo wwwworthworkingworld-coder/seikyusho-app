@@ -4,3 +4,10 @@ ios/DerivedData/
 *.p8
 *.csv
 !test/fixtures/*.csv
+
+android/build/
+android/.gradle/
+android/app/build/
+android/local.properties
+*.keystore
+*.jks

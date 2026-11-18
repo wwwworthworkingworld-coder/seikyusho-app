@@ -1,10 +1,12 @@
 (async () => {
   const C = window.SeikyushoCore, Paper = window.SeikyushoPaper;
   const KEY = "seikyusho-app-v1";
-  const PRODUCT_ID = "com.company256.seikyusho.pro";
+  const platform = window.Capacitor && window.Capacitor.getPlatform ? window.Capacitor.getPlatform() : "web";
+  // 課金の商品 ID は App Store と Google Play で別（Play は小文字とアンダースコア）
+  const PRODUCT_ID = platform === "android" ? "seikyusho_pro" : "com.company256.seikyusho.pro";
   const PRIVACY_URL = "https://256company.com/seikyusho-app-privacy.html";
   const SUPPORT_URL = "https://256company.com/seikyusho-app-support.html";
-  const REVIEW_URL = "https://apps.apple.com/jp/app/id6835948237?action=write-review";
+  const REVIEW_URL = platform === "android" ? "https://play.google.com/store/apps/details?id=com.company256.seikyusho" : "https://apps.apple.com/jp/app/id6835948237?action=write-review";
   const native = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
   const P = native ? window.Capacitor.Plugins : {};
   const store = () => window.SeikyushoStoreMock || P.SeikyushoStore;
