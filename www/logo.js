@@ -80,7 +80,7 @@
       }
       case "wordmark": {
         const fs = fitSize(core, 270, 40); const w = Math.min(270, textWidth(core, fs));
-        inner = `${T(150, 44, core, fs, ink, "middle")}<rect x="${150 - w / 2}" y="70" width="${w}" height="6" rx="3" fill="${main}"/>`; break;
+        inner = `${T(150, 44, core, fs, main, "middle")}<rect x="${150 - w / 2}" y="70" width="${w}" height="6" rx="3" fill="${sub}"/>`; break;
       }
       case "wordmark-frame": {
         const fs = fitSize(core, 230, 32);
@@ -106,7 +106,7 @@
       }
       case "line-frame": {
         const fs = fitSize(core, 210, 30); const w = Math.min(210, textWidth(core, fs));
-        inner = `${T(150, 50, core, fs, ink, "middle")}<rect x="${150 - w / 2 - 34}" y="48.5" width="24" height="3" fill="${main}"/><rect x="${150 + w / 2 + 10}" y="48.5" width="24" height="3" fill="${main}"/><rect x="${150 - w / 2 - 28}" y="46" width="8" height="8" transform="rotate(45 ${150 - w / 2 - 24} 50)" fill="${main}"/><rect x="${150 + w / 2 + 20}" y="46" width="8" height="8" transform="rotate(45 ${150 + w / 2 + 24} 50)" fill="${main}"/>`; break;
+        inner = `${T(150, 50, core, fs, ink, "middle")}<rect x="${150 - w / 2 - 34}" y="48.5" width="24" height="3" fill="${main}"/><rect x="${150 + w / 2 + 10}" y="48.5" width="24" height="3" fill="${main}"/><rect x="${150 - w / 2 - 28}" y="46" width="8" height="8" transform="rotate(45 ${150 - w / 2 - 24} 50)" fill="${sub}"/><rect x="${150 + w / 2 + 20}" y="46" width="8" height="8" transform="rotate(45 ${150 + w / 2 + 24} 50)" fill="${sub}"/>`; break;
       }
       case "hexagon": {
         const fs = fitSize(core, 190, 30);
