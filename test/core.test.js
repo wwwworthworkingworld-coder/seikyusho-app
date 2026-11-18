@@ -282,12 +282,13 @@ t("ロゴ：法人格を除いた本体と頭文字（英字は単語の頭、�
   assert.strictEqual(Lg.nameParts("").core, "");
 });
 t("ロゴ：型 10 種・色 6・書体 3。どの組み合わせでも屋号を含む SVG になり、特殊文字は無害化", () => {
-  assert.strictEqual(Lg.TEMPLATES.length, 10); assert.strictEqual(Lg.PALETTES.length, 6); assert.strictEqual(Lg.FONTS.length, 3);
+  assert.strictEqual(Lg.TEMPLATES.length, 10); assert.strictEqual(Lg.PALETTES.length, 8); assert.strictEqual(Lg.FONTS.length, 3);
   Lg.TEMPLATES.forEach(([tp]) => Lg.PALETTES.forEach(([pl]) => Lg.FONTS.forEach(([f]) => {
     const s = Lg.logoSvg("株式会社サンプル工房", { template: tp, palette: pl, font: f, seed: 1 });
     assert.ok(s.startsWith("<svg") && s.endsWith("</svg>"), tp);
     assert.ok(tp === "monogram" ? s.includes(">サン<") : s.includes("サンプル工房"), tp + " " + pl);
   })));
+  assert.ok(!Lg.logoSvg("見本", { template: "wafu-rakkan" }).includes("Gradient") && Lg.logoSvg("見本商事", { template: "wafu-rakkan" }).includes("<rect"));
   const s = Lg.logoSvg("<b>見本</b>", { template: "wordmark" });
   assert.ok(!s.includes("<b>") && s.includes("&lt;b&gt;"));
   assert.strictEqual(Lg.logoSvg("", {}), "");

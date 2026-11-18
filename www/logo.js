@@ -3,13 +3,16 @@
 (function (root) {
   const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   // 色：主色・補助色・文字色（アプリの色テンプレと同じ系統＋2 つ）
+  // 色：日本のビジネスロゴで定番の 2 色（主色・補助色・文字色）。調査 2026-11-19（02_画面設計.md 11 章）
   const PALETTES = [
-    ["indigo", "インディゴ", "#3f51b5", "#8c9cf0", "#1f2430"],
-    ["navy", "紺", "#1f4e8c", "#5b8dd6", "#1f2430"],
-    ["green", "緑", "#1e7f6b", "#5fc4a8", "#1f2430"],
-    ["wine", "ワイン", "#8b2942", "#d26a85", "#1f2430"],
-    ["gray", "グレー", "#4a5568", "#a0aec0", "#1f2430"],
-    ["mono", "黒", "#222222", "#888888", "#222222"],
+    ["navy-gold", "ネイビー×ゴールド", "#0B1D3A", "#D4AF37", "#0B1D3A"],
+    ["black-white", "黒×白", "#111111", "#888888", "#111111"],
+    ["green-cream", "深緑×生成り", "#00552E", "#C9B99A", "#1f2a24"],
+    ["wine-beige", "ワイン×ベージュ", "#640125", "#C9A27A", "#3a1f28"],
+    ["navy-white", "ネイビー×白", "#223A70", "#6B86C4", "#223A70"],
+    ["charcoal-orange", "チャコール×オレンジ", "#524E4D", "#ED6D3D", "#2b2928"],
+    ["teal-white", "青緑×白", "#0E7C7B", "#6FC2C1", "#0E4F4E"],
+    ["sumi-shu", "墨×朱", "#595857", "#EB6101", "#2f2e2d"],
   ];
   // 書体：iOS 内蔵（Hiragino）を基本に、Android・パソコンの代替を並べる
   const FONTS = [
@@ -17,14 +20,14 @@
     ["maru", "丸ゴシック", '"Hiragino Maru Gothic ProN","Hiragino Maru Gothic Pro","Noto Sans JP","Yu Gothic","Meiryo",sans-serif', 700],
     ["mincho", "明朝", '"Hiragino Mincho ProN","Hiragino Mincho Pro","Noto Serif JP","Yu Mincho","YuMincho",serif', 700],
   ];
-  // 型（2025〜26 年のロゴメーカーに多い形：太いサンセリフ、1〜2 色、余白、バッジ、角丸、頭文字＋ワードマーク、線の枠、グラデーション、反転）
+  // 型（調査 2026-11-19：日本の小規模事業は「シンプル・モノクロ・文字主体」が最多、次に和風、エンブレム。小さく白黒で印刷しても潰れないよう、グラデーション・細線は使わず 2 色まで）
   const TEMPLATES = [
     ["badge-circle", "丸バッジ＋屋号"],
     ["badge-square", "角丸スクエア＋屋号"],
     ["wordmark", "ワードマーク（下線）"],
     ["wordmark-frame", "ワードマーク（細枠）"],
     ["initial-stack", "頭文字＋屋号 2 段"],
-    ["gradient-badge", "グラデーションの丸"],
+    ["wafu-rakkan", "和風（落款つき）"],
     ["inverse", "反転色（濃い地に白）"],
     ["line-frame", "線の飾り枠"],
     ["hexagon", "六角形バッジ"],
@@ -81,15 +84,21 @@
       }
       case "wordmark-frame": {
         const fs = fitSize(core, 230, 32);
-        inner = `<rect x="10" y="16" width="280" height="68" rx="12" fill="none" stroke="${main}" stroke-width="3"/>${T(150, 50, core, fs, main, "middle")}`; break;
+        inner = `<rect x="10" y="16" width="280" height="68" rx="12" fill="none" stroke="${main}" stroke-width="4"/>${T(150, 50, core, fs, main, "middle")}`; break;
       }
       case "initial-stack": {
         const fs = fitSize(core, 190, 26);
         inner = `${T(44, 50, ini, 56, main, "middle")}<rect x="86" y="24" width="2" height="52" fill="${sub}"/>${T(100, 40, core, fs, ink)}<rect x="100" y="62" width="${Math.min(190, textWidth(core, fs))}" height="3" fill="${sub}"/>`; break;
       }
-      case "gradient-badge": {
-        const fs = fitSize(core, 190, 30);
-        inner = `<defs><linearGradient id="g${spec.seed || 0}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${sub}"/><stop offset="1" stop-color="${main}"/></linearGradient></defs><circle cx="46" cy="50" r="38" fill="url(#g${spec.seed || 0})"/>${T(46, 51, ini, iniFs, "#fff", "middle")}${T(96, 50, core, fs, ink)}`; break;
+      case "wafu-rakkan": {
+        // 和風：明朝の屋号＋右に小さな朱の落款（頭文字）。筆文字・判子の需要（ココナラ・Canva の和風テンプレ）に合わせる
+        const fam = FONTS[2][2];
+        const fs = fitSize(core, 210, 34);
+        const w = Math.min(210, textWidth(core, fs));
+        const x0 = 150 - (w + 34) / 2;
+        inner = `<text x="${x0}" y="52" font-size="${fs}" font-weight="700" fill="${ink}" text-anchor="start" dominant-baseline="central" style="font-family:${esc(fam)};letter-spacing:2px">${esc(core)}</text>`
+          + `<rect x="${x0 + w + 10}" y="36" width="26" height="26" rx="2" fill="${sub === "#888888" ? "#C0392B" : sub}"/>`
+          + `<text x="${x0 + w + 23}" y="49.5" font-size="${ini.length > 1 ? 11 : 17}" font-weight="700" fill="#fff" text-anchor="middle" dominant-baseline="central" style="font-family:${esc(fam)}">${esc(ini.slice(0, 2))}</text>`; break;
       }
       case "inverse": {
         const fs = fitSize(core, 250, 34);
@@ -97,7 +106,7 @@
       }
       case "line-frame": {
         const fs = fitSize(core, 210, 30); const w = Math.min(210, textWidth(core, fs));
-        inner = `${T(150, 50, core, fs, ink, "middle")}<rect x="${150 - w / 2 - 34}" y="49" width="24" height="2" fill="${main}"/><rect x="${150 + w / 2 + 10}" y="49" width="24" height="2" fill="${main}"/><rect x="${150 - w / 2 - 28}" y="46" width="8" height="8" transform="rotate(45 ${150 - w / 2 - 24} 50)" fill="${main}"/><rect x="${150 + w / 2 + 20}" y="46" width="8" height="8" transform="rotate(45 ${150 + w / 2 + 24} 50)" fill="${main}"/>`; break;
+        inner = `${T(150, 50, core, fs, ink, "middle")}<rect x="${150 - w / 2 - 34}" y="48.5" width="24" height="3" fill="${main}"/><rect x="${150 + w / 2 + 10}" y="48.5" width="24" height="3" fill="${main}"/><rect x="${150 - w / 2 - 28}" y="46" width="8" height="8" transform="rotate(45 ${150 - w / 2 - 24} 50)" fill="${main}"/><rect x="${150 + w / 2 + 20}" y="46" width="8" height="8" transform="rotate(45 ${150 + w / 2 + 24} 50)" fill="${main}"/>`; break;
       }
       case "hexagon": {
         const fs = fitSize(core, 190, 30);
