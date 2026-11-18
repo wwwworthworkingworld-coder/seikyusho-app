@@ -181,8 +181,12 @@
     });
     $("itemChips").hidden = !items.length;
     renderLines();
-    const next = { "見積書": "納品書", "納品書": "請求書", "請求書": "領収書" }[d.kind];
-    $("convertBtn").hidden = !next; if (next) $("convertBtn").textContent = `この内容で${next}を作る`;
+    // 引き継ぎ：他の 3 種類すべてへ（見積書から請求書へ直接など）。流れの順に並べる
+    const box = $("convertBox"); box.innerHTML = "";
+    C.KINDS.filter(k => k !== d.kind).forEach(k => {
+      const b = document.createElement("button"); b.type = "button"; b.className = "secondary"; b.textContent = `この内容で${k}を作る`;
+      b.onclick = () => convertTo(k); box.appendChild(b);
+    });
     $("paidBtn").hidden = d.kind !== "請求書"; $("paidBtn").textContent = d.paid ? "未入金に戻す" : "入金済みにする";
     $("docActions").hidden = !!d.isNew;
     renderTotal();
@@ -220,8 +224,8 @@
   ["to", "no", "date", "due", "subject", "memo"].forEach(k => { $(k).addEventListener("input", () => { cur[k] = $(k).value; if (k === "date" && cur.kind !== "領収書" && cur.kind !== "納品書") { cur.due = C.defaultDue(cur.kind, cur.date); $("due").value = cur.due; } commit(); }); });
   $("honor").onchange = () => { cur.honor = $("honor").value; commit(); };
   $("wh").onchange = () => { cur.wh = $("wh").checked; commit(); };
-  $("convertBtn").onclick = () => {
-    const next = { "見積書": "納品書", "納品書": "請求書", "請求書": "領収書" }[cur.kind]; if (!next) return;
+  function convertTo(next) {
+    if (!next || next === cur.kind) return;
     if (!tryCreate()) return;
     const n = C.convert(cur, next, data.docs, data.settings, new Date(), newId());
     delete n.isNew; data.docs.push(n); data.settings.created = (Number(data.settings.created) || 0) + 1; save();
