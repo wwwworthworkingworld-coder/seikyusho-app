@@ -26,7 +26,7 @@
       </div>
       <div id="docsBody">
         <div class="chips filter" id="kindFilter"></div>
-        <input id="search" type="search" placeholder="取引先名・件名で探す" autocomplete="off">
+        <input id="search" type="search" placeholder="取引先・件名・番号・品目で探す" autocomplete="off">
         <div id="docList"></div>
       </div>
     </section>
@@ -56,10 +56,12 @@
 
       <div class="card form">
         <label>品目</label>
+        <input id="itemSearch" type="search" placeholder="品目を探す" autocomplete="off" hidden>
         <div class="chips" id="itemChips"></div>
         <div id="lines"></div>
-        <div class="row2">
-          <button class="secondary" type="button" id="addLine">＋ 行を追加</button>
+        <div class="row3">
+          <button class="secondary" type="button" id="addLine">＋ 行</button>
+          <button class="secondary" type="button" id="addSubtotal">＋ 小計</button>
           <button class="secondary" type="button" id="addDiscount">＋ 値引き</button>
         </div>
       </div>
@@ -144,6 +146,18 @@
           <div class="row4" id="prefixRow"></div>
           <label class="switch"><span>番号に年を入れる <small>I-2026-001 の「2026」</small></span><input id="yearInNo" type="checkbox"></label>
         </div>
+        <label class="switch"><span>題名に「御」を付ける <small>御見積書・御納品書・御請求書（領収書は対象外）</small></span><input id="goTitle" type="checkbox"></label>
+      </div>
+
+      <div class="card">
+        <h2>売上の一覧を CSV で書き出す</h2>
+        <p class="note">年で絞って、日付・種類・番号・取引先・件名・税抜・消費税・源泉徴収・税込・差引・入金の一覧を CSV にします。確定申告の売上帳や、当社の帳簿 Excel に貼れます。</p>
+        <div class="row2"><select id="csvYear"></select><button class="secondary" type="button" id="csvBtn">CSV を書き出す</button></div>
+      </div>
+
+      <div class="card">
+        <h2>最近削除 <small>30 日間は戻せます</small></h2>
+        <ul class="list" id="trashList"></ul>
       </div>
 
       <div class="card">

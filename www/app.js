@@ -18,10 +18,10 @@
   const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   const COLOR_HEX = Object.fromEntries(C.COLORS.map(([k, , hex]) => [k, hex]));
-  const KIND_COLOR = { "見積書": "#5a7d9a", "納品書": "#6b8e5a", "請求書": "#3f51b5", "領収書": "#8b2942" };
+  const KIND_COLOR = { "見積書": "#5a7d9a", "納品書": "#6b8e5a", "請求書": "#3f51b5", "領収書": "#8b2942", "発注書": "#7a5a9a", "注文書": "#9a7a3a" };
 
   // ---- 保存（アプリ専用の領域。この端末の中だけ）
-  const EMPTY = () => ({ docs: [], clients: [], items: [], me: { name: "", addr: "", tel: "", mail: "", reg: "", taxable: true, bank: "" },
+  const EMPTY = () => ({ docs: [], trash: [], clients: [], items: [], me: { name: "", addr: "", tel: "", mail: "", reg: "", taxable: true, bank: "" },
     settings: { rounding: "floor", rates: [10, 8], defaultRate: 10, color: "navy", seal: { type: "none" }, logo: "", prefix: Object.assign({}, C.PREFIX), yearInNo: true, created: 0, lastBackup: "", launches: 0, reviewAsked: false } });
   async function load() {
     try {
@@ -30,6 +30,7 @@
       d.me = Object.assign(EMPTY().me, d.me || {}); d.settings = Object.assign(EMPTY().settings, d.settings || {});
       d.settings.prefix = Object.assign({}, C.PREFIX, d.settings.prefix || {});
       if (!Array.isArray(d.settings.rates) || !d.settings.rates.length) d.settings.rates = [10, 8];
+      d.trash = C.purgeTrash(Array.isArray(d.trash) ? d.trash : []);
       return d;
     } catch (e) { return EMPTY(); }
   }
@@ -50,9 +51,10 @@
   let purchased = false;
   let kindFilter = "", search = "";
   let tId;
+  const years = () => { const s = new Set(data.docs.map(d => +String(d.date || "").slice(0, 4)).filter(Boolean)); s.add(+today().slice(0, 4)); return [...s].sort((a, b) => b - a); };
   function toast(msg) { const t = $("toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(tId); tId = setTimeout(() => t.classList.remove("show"), 2400); }
   const calcOpt = doc => ({ taxable: data.me.taxable !== false, rounding: data.settings.rounding, withholding: !!(doc && doc.wh) });
-  const paperOpt = () => ({ color: purchased ? data.settings.color : "navy", rounding: data.settings.rounding, seal: purchased ? data.settings.seal : { type: "none" }, logo: purchased ? data.settings.logo : "" });
+  const paperOpt = () => ({ go: !!data.settings.go, color: purchased ? data.settings.color : "navy", rounding: data.settings.rounding, seal: purchased ? data.settings.seal : { type: "none" }, logo: purchased ? data.settings.logo : "" });
 
   // ---- 画面の切り替え
   const TITLES = { docs: "書類", edit: "作る", settings: "設定" };
@@ -95,7 +97,7 @@
     if (empty) return;
     chips($("kindFilter"), [["", "すべて"], ...C.KINDS.map(k => [k, k])], kindFilter, v => { kindFilter = v; renderDocs(); });
     const q = search.trim();
-    const docs = data.docs.filter(d => (!kindFilter || d.kind === kindFilter) && (!q || (d.to || "").includes(q) || (d.subject || "").includes(q) || (d.no || "").includes(q)));
+    const docs = data.docs.filter(d => (!kindFilter || d.kind === kindFilter) && C.matchDoc(d, q));
     const groups = C.groupByMonth(docs, calcOpt());
     const box = $("docList"); box.innerHTML = "";
     if (!groups.length) { box.innerHTML = '<ul class="doclist"><li class="empty">見つかりませんでした</li></ul>'; return; }
@@ -173,7 +175,10 @@
     $("subjectLabel").innerHTML = d.kind === "領収書" ? '但し書き <small>「〇〇として」の〇〇</small>' : '件名 <small>任意</small>';
     $("subject").value = d.subject || "";
     $("wh").checked = !!d.wh; $("memo").value = d.memo || "";
-    const items = C.recentItems(data.docs, 8);
+    const allItems = C.recentItems(data.docs, 40);
+    $("itemSearch").hidden = allItems.length <= 10;
+    const iq = $("itemSearch").value.trim();
+    const items = (iq ? allItems.filter(it => it.item.includes(iq)) : allItems).slice(0, iq ? 20 : 8);
     chips($("itemChips"), items.map(it => [it.item, esc(it.item)]), null, name => {
       const it = items.find(x => x.item === name);
       const empty = d.lines.find(l => !String(l.item || "").trim());
@@ -181,7 +186,7 @@
       Object.assign(l, { item: it.item, unit: it.unit, price: it.price, rate: it.rate === undefined ? data.settings.defaultRate : it.rate, qty: l.qty || 1 });
       commit(); renderLines();
     });
-    $("itemChips").hidden = !items.length;
+    $("itemChips").hidden = !items.length && !iq;
     renderLines();
     // 引き継ぎ：他の 3 種類すべてへ（見積書から請求書へ直接など）。流れの順に並べる
     const box = $("convertBox"); box.innerHTML = "";
@@ -196,8 +201,17 @@
   function renderLines() {
     const box = $("lines"); box.innerHTML = "";
     const rates = data.settings.rates.slice().sort((a, b) => b - a);
+    const subs = new Map(C.subtotals(cur.lines).map(s => [s.index, s.amount]));
     cur.lines.forEach((l, i) => {
-      const div = document.createElement("div"); div.className = "line" + (Number(l.price) < 0 ? " discount" : "");
+      const div = document.createElement("div");
+      if (C.isSubtotal(l)) {
+        div.className = "line subtotal";
+        div.innerHTML = `<div class="l1"><input class="item" type="text" maxlength="20" placeholder="小計" value="${esc(l.item || "小計")}"><button type="button" class="del" aria-label="この小計を消す">×</button></div><div class="l3"><small>ここまでの合計</small><span class="amt">${yen(subs.get(i) || 0)}</span></div>`;
+        div.querySelector(".item").addEventListener("input", e => { l.item = e.target.value; commit(); });
+        div.querySelector(".del").onclick = () => { cur.lines.splice(i, 1); commit(); renderLines(); };
+        box.appendChild(div); return;
+      }
+      div.className = "line" + (Number(l.price) < 0 ? " discount" : "");
       div.innerHTML = `<div class="l1"><input class="item" type="text" maxlength="60" placeholder="${Number(l.price) < 0 ? "値引きの名目" : "品目（例：デザイン制作）"}" value="${esc(l.item)}"><button type="button" class="del" aria-label="この行を消す">×</button></div>
         <div class="l2"><input class="qty" type="number" inputmode="decimal" step="any" placeholder="数量" value="${esc(l.qty)}"><input class="unit" type="text" maxlength="6" placeholder="単位" value="${esc(l.unit)}"><input class="price" type="number" inputmode="numeric" step="1" placeholder="単価（税抜）" value="${esc(l.price)}"></div>
         <div class="l3"><div class="chips rates"></div><span class="amt ${C.lineAmount(l) < 0 ? "minus" : ""}">${yen(C.lineAmount(l))}</span></div>`;
@@ -208,6 +222,9 @@
         l.price = div.querySelector(".price").value === "" ? "" : Number(div.querySelector(".price").value);
         div.querySelector(".amt").textContent = yen(C.lineAmount(l)); div.querySelector(".amt").className = "amt" + (C.lineAmount(l) < 0 ? " minus" : "");
         commit();
+        // 小計行の表示も更新
+        const s2 = new Map(C.subtotals(cur.lines).map(s => [s.index, s.amount]));
+        box.querySelectorAll(".line.subtotal").forEach((el, k) => { const idx = [...s2.keys()][k]; el.querySelector(".amt").textContent = yen(s2.get(idx) || 0); });
       };
       div.querySelectorAll("input").forEach(e => e.addEventListener("input", upd));
       div.querySelector(".del").onclick = () => { cur.lines.splice(i, 1); if (!cur.lines.length) cur.lines.push(blankLine()); commit(); renderLines(); };
@@ -222,6 +239,8 @@
     $("tbTotal").textContent = yen(shown);
   }
   $("addLine").onclick = () => { cur.lines.push(blankLine()); renderLines(); setTimeout(() => { const els = $("lines").querySelectorAll(".item"); els[els.length - 1].focus(); }, 30); };
+  $("addSubtotal").onclick = () => { cur.lines.push({ type: "subtotal", item: "小計" }); cur.lines.push(blankLine()); commit(); renderLines(); };
+  $("itemSearch").addEventListener("input", () => renderEdit());
   $("addDiscount").onclick = () => { cur.lines.push({ item: "値引き", qty: 1, unit: "", price: "", rate: data.settings.defaultRate }); commit(); renderLines(); setTimeout(() => { const els = $("lines").querySelectorAll(".price"); els[els.length - 1].focus(); }, 30); };
   ["to", "no", "date", "due", "subject", "memo"].forEach(k => { $(k).addEventListener("input", () => { cur[k] = $(k).value; if (k === "date" && cur.kind !== "領収書" && cur.kind !== "納品書") { cur.due = C.defaultDue(cur.kind, cur.date); $("due").value = cur.due; } commit(); }); });
   $("honor").onchange = () => { cur.honor = $("honor").value; commit(); };
@@ -242,8 +261,9 @@
     cur = n; renderEdit(); $("scroll").scrollTop = 0; renderBadge(); toast(`複製しました（${cur.no}）`);
   };
   $("deleteBtn").onclick = () => {
-    if (!confirm(`${cur.kind} ${cur.no} を削除しますか？`)) return;
-    data.docs = data.docs.filter(d => d.id !== cur.id); save(true); cur = null; showTab("docs"); toast("削除しました");
+    if (!confirm(`${cur.kind} ${cur.no} を削除しますか？（設定の「最近削除」から ${C.TRASH_DAYS} 日間は戻せます）`)) return;
+    data.trash = C.purgeTrash(data.trash).concat([Object.assign({}, cur, { deletedAt: new Date().toISOString() })]);
+    data.docs = data.docs.filter(d => d.id !== cur.id); save(true); cur = null; showTab("docs"); toast("削除しました（最近削除に移動）");
   };
 
   // ---- プレビュー・PDF
@@ -379,12 +399,36 @@
       pr.appendChild(d);
     });
     $("yearInNo").checked = s.yearInNo !== false;
+    $("goTitle").checked = !!s.go;
+    // 最近削除
+    data.trash = C.purgeTrash(data.trash);
+    const tl = $("trashList"); tl.innerHTML = "";
+    if (!data.trash.length) tl.innerHTML = '<li class="empty">最近削除した書類はありません</li>';
+    data.trash.slice().reverse().forEach(t => {
+      const li = document.createElement("li");
+      li.innerHTML = `<span class="t">${esc(t.kind)} ${esc(t.no)}<small>${esc(t.to || "")}　あと ${C.trashDaysLeft(t)} 日</small></span><button type="button" class="secondary small" aria-label="${esc(t.no)} を戻す">戻す</button>`;
+      li.querySelector("button").onclick = async () => {
+        data.trash = data.trash.filter(x => x !== t); const d = Object.assign({}, t); delete d.deletedAt;
+        if (data.docs.some(x => x.kind === d.kind && d.no === x.no)) d.no = C.nextNo(data.docs, d.kind, data.settings);
+        data.docs.push(d); await save(true); renderSettings(); toast(`${d.kind} ${d.no} を戻しました`);
+      };
+      tl.appendChild(li);
+    });
+    // 売上 CSV の年
+    const cy = $("csvYear"), ys = years(); cy.innerHTML = ys.map(y => `<option value="${y}">${y}年</option>`).join(""); if (!ys.includes(+cy.value)) cy.value = String(ys[0]);
     $("lastBackup").textContent = s.lastBackup ? `最後のバックアップ：${new Date(s.lastBackup).toLocaleDateString("ja-JP")}` : "まだバックアップを書き出していません。";
     renderBuy();
   }
   ["me_name", "me_addr", "me_tel", "me_mail", "me_reg", "me_bank"].forEach(k => { $(k).addEventListener("input", () => { data.me[k.slice(3)] = $(k).value; if (k === "me_reg") $("regErr").hidden = !data.me.reg || C.isRegNo(data.me.reg); if (k === "me_name" && data.settings.seal && data.settings.seal.type === "text" && !data.settings.seal.userText) { data.settings.seal.text = data.me.name; if (!$("tab-settings").hidden) { $("sealText").value = data.me.name; renderSealPreview(); } } save(); }); });
   $("me_reg").addEventListener("blur", () => { data.me.reg = C.normalizeRegNo(data.me.reg); $("me_reg").value = data.me.reg; $("regErr").hidden = !data.me.reg || C.isRegNo(data.me.reg); save(); });
   $("yearInNo").onchange = () => { data.settings.yearInNo = $("yearInNo").checked; save(); };
+  $("goTitle").onchange = () => { data.settings.go = $("goTitle").checked; save(); };
+  $("csvBtn").onclick = async () => {
+    const y = +$("csvYear").value;
+    if (!data.docs.some(d => String(d.date || "").startsWith(String(y)))) { toast("その年の書類がありません"); return; }
+    try { if (await shareText(C.salesCsv(data.docs, y, calcOpt()), `seikyusho_${y}.csv`, "text/csv")) toast("CSV を書き出しました"); }
+    catch (e) { toast("書き出せませんでした"); }
+  };
   function renderSealPreview() {
     const sp = $("sealPreview");
     const m = Paper.paperHtml({ kind: "請求書", lines: [] }, {}, { seal: data.settings.seal }).match(/<div class="seal">[\s\S]*?<\/div>\s*<\/div>/);
@@ -495,7 +539,7 @@
       if (add) { data.docs = C.mergeDocs(data.docs, d.docs); d.clients.forEach(c => { if (!data.clients.some(x => x.name === c.name)) data.clients.push(c); }); }
       else {
         if (data.docs.length && !confirm(`今の書類 ${data.docs.length}件を消して、バックアップの ${d.docs.length}件に置き換えます。よいですか？`)) return;
-        data.docs = d.docs; data.clients = d.clients; data.items = d.items;
+        data.docs = d.docs; data.trash = C.purgeTrash(d.trash || []); data.clients = d.clients; data.items = d.items;
         data.me = Object.assign(EMPTY().me, d.me); data.settings = Object.assign(data.settings, d.settings, { launches: data.settings.launches, reviewAsked: data.settings.reviewAsked });
         data.settings.prefix = Object.assign({}, C.PREFIX, data.settings.prefix || {});
       }

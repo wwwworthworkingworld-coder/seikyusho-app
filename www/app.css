@@ -86,6 +86,13 @@ input[type=search]{margin-bottom:12px}
 .line input,.line select{background:var(--card)}
 .line .del{border:0;background:none;color:var(--muted);font-size:22px;padding:0;min-height:46px}
 .line.discount{border:1px dashed var(--bad)}
+.line.subtotal{background:var(--main-weak)}
+.line.subtotal .l3 small{color:var(--muted);font-size:12px}
+.row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.row3 .secondary{padding:12px 6px;font-size:15px}
+#itemSearch{margin-bottom:8px}
+#trashList li{grid-template-columns:1fr auto}
+#trashList .secondary.small{width:auto;padding:8px 14px;min-height:36px}
 .line .unitc{position:relative}
 
 /* 一覧 */

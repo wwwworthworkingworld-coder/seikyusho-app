@@ -220,6 +220,60 @@ t("ファイル名：種類_番号_取引先.pdf、使えない文字は除く",
   assert.strictEqual(P.pdfFileName(Object.assign({}, DOC, { to: "見本/商事:株" })), "請求書_I-2026-001_見本商事株.pdf");
 });
 
+// ---- 1.0 追加の 8 項目（競合比較 07 の 4-2）
+t("小計行：直前の小計からの合計。合計・消費税には入れない", () => {
+  const ls = [L("基礎", 1, 100000), L("型枠", 2, 30000), { type: "subtotal", item: "小計" }, L("塗装", 1, 50000), { type: "subtotal", item: "小計" }];
+  assert.deepStrictEqual(C.subtotals(ls), [{ index: 2, amount: 160000 }, { index: 4, amount: 50000 }]);
+  const c = C.calc(ls); assert.strictEqual(c.base, 210000); assert.strictEqual(c.lines.length, 3);
+  const h = P.paperHtml(Object.assign({}, DOC, { lines: ls }), ME, {});
+  assert.ok(h.includes('class="sub"') && h.includes("160,000") && h.includes("50,000"));
+});
+t("値引き行は PDF で赤（neg）", () => {
+  const h = P.paperHtml(DOC, ME, {}); assert.ok(h.includes('class="neg"'));
+  assert.ok(!P.paperHtml(Object.assign({}, DOC, { lines: [L("a", 1, 100)] }), ME, {}).includes('class="neg"'));
+});
+t("「御」の切替：設定でオンのとき見積・納品・請求の題名に御、領収書は変わらない。既定は御なし", () => {
+  assert.ok(P.paperHtml(Object.assign({}, DOC, { kind: "見積書" }), ME, {}).includes("見 積 書") && !P.paperHtml(Object.assign({}, DOC, { kind: "見積書" }), ME, {}).includes("御 見 積 書"));
+  assert.ok(P.paperHtml(Object.assign({}, DOC, { kind: "見積書" }), ME, { go: true }).includes("御 見 積 書"));
+  assert.ok(P.paperHtml(DOC, ME, { go: true }).includes("御 請 求 書"));
+  assert.ok(P.paperHtml(Object.assign({}, DOC, { kind: "領収書" }), ME, { go: true }).includes("領 収 書"));
+});
+t("発注書・注文書：種類 6 つ、番号の接頭 PO/OR、納期、発注者／受注者の欄名", () => {
+  assert.deepStrictEqual(C.KINDS, ["見積書", "納品書", "請求書", "領収書", "発注書", "注文書"]);
+  assert.strictEqual(C.nextNo([], "発注書", settings(), NOW), "PO-2026-001");
+  assert.strictEqual(C.defaultDue("発注書", "2026-11-17"), "2026-12-17");
+  const h = P.paperHtml(Object.assign({}, DOC, { kind: "発注書", due: "2026-12-17" }), ME, {});
+  assert.ok(h.includes("発 注 書") && h.includes("納期：2026年12月17日") && h.includes("受注者") && h.includes("発注者") && h.includes("発注金額"));
+  assert.ok(P.paperHtml(Object.assign({}, DOC, { kind: "注文書" }), ME, {}).includes("注 文 書"));
+});
+t("最近削除：30 日以内は残り、31 日以上で消える。残り日数", () => {
+  const tr = [{ id: "a", deletedAt: "2026-11-01T00:00:00.000Z" }, { id: "b", deletedAt: "2026-10-01T00:00:00.000Z" }];
+  assert.deepStrictEqual(C.purgeTrash(tr, NOW).map(x => x.id), ["a"]);
+  assert.strictEqual(C.trashDaysLeft(tr[0], NOW), 30 - Math.floor((NOW - new Date(tr[0].deletedAt)) / 864e5));   // タイムゾーンに依らない
+  const r = C.restore(C.backup({ docs: [], trash: tr }, NOW)); assert.strictEqual(r.trash.length, 2);
+});
+t("検索：取引先・件名・番号・備考・品目名", () => {
+  const d = { to: "見本商事", subject: "ロゴ制作", no: "I-2026-003", memo: "急ぎ", lines: [L("名刺デザイン", 1, 1)] };
+  ["見本", "ロゴ", "003", "急ぎ", "名刺"].forEach(q => assert.ok(C.matchDoc(d, q), q));
+  assert.ok(!C.matchDoc(d, "存在しない")); assert.ok(C.matchDoc(d, ""));
+});
+t("売上一覧の CSV：年で絞り、BOM 付き、列は日付〜入金、税抜・消費税・源泉・税込・差引", () => {
+  const docs = [
+    { kind: "請求書", no: "I-2026-001", date: "2026-03-10", to: "見本商事", subject: "A", wh: true, paid: true, lines: [L("a", 1, 100000)] },
+    { kind: "見積書", no: "Q-2026-001", date: "2026-04-01", to: "サンプル工房", subject: "B", wh: false, lines: [L("b", 1, 50000)] },
+    { kind: "請求書", no: "I-2025-009", date: "2025-12-01", to: "去年", subject: "", wh: false, lines: [L("c", 1, 1000)] },
+  ];
+  const csv = C.salesCsv(docs, 2026, { taxable: true, rounding: "floor" });
+  assert.ok(csv.startsWith("﻿\"日付\",\"種類\",\"番号\",\"取引先\",\"件名\",\"税抜\",\"消費税\",\"源泉徴収\",\"税込\",\"差引\",\"入金\""));
+  const lines = csv.trim().split("\r\n"); assert.strictEqual(lines.length, 3);
+  assert.strictEqual(lines[1], '"2026-03-10","請求書","I-2026-001","見本商事","A","100000","10000","10210","110000","99790","済"');
+  assert.ok(lines[2].includes('"見積書"') && lines[2].endsWith('""') && !csv.includes("去年"));
+});
+t("空欄の項目は書類に印刷しない（電話・メール・住所・登録番号が空ならその行が出ない）", () => {
+  const h = P.paperHtml(DOC, { name: "サンプル工房", taxable: true }, {});
+  assert.ok(!h.includes("TEL") && !h.includes("登録番号") && !h.includes("お振込先"));
+});
+
 // ---- ロゴの自動生成
 t("ロゴ：法人格を除いた本体と頭文字（英字は単語の頭、和文は先頭 1〜2 字）", () => {
   assert.deepStrictEqual([Lg.nameParts("株式会社見本商事").core, Lg.nameParts("株式会社見本商事").initials], ["見本商事", "見本"]);

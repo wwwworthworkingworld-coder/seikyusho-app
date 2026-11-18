@@ -5,9 +5,10 @@
   const br = s => esc(s).replace(/\n/g, "<br>");
   const COLOR = Object.fromEntries(C.COLORS.map(([k, , hex]) => [k, hex]));
 
-  const TITLE = { "見積書": "御 見 積 書", "納品書": "納 品 書", "請求書": "請 求 書", "領収書": "領 収 書" };
-  const GREET = { "見積書": "下記のとおりお見積り申し上げます。", "納品書": "下記のとおり納品いたしました。", "請求書": "下記のとおりご請求申し上げます。", "領収書": "下記の金額を正に領収いたしました。" };
-  const LABEL = { "見積書": "お見積金額", "納品書": "合計金額", "請求書": "ご請求金額", "領収書": "領収金額" };
+  const TITLE = { "見積書": "見 積 書", "納品書": "納 品 書", "請求書": "請 求 書", "領収書": "領 収 書", "発注書": "発 注 書", "注文書": "注 文 書" };
+  const GO = { "見積書": "御 見 積 書", "納品書": "御 納 品 書", "請求書": "御 請 求 書" };   // 設定「御」を付けるとき
+  const GREET = { "見積書": "下記のとおりお見積り申し上げます。", "納品書": "下記のとおり納品いたしました。", "請求書": "下記のとおりご請求申し上げます。", "領収書": "下記の金額を正に領収いたしました。", "発注書": "下記のとおり発注いたします。", "注文書": "下記のとおり注文いたします。" };
+  const LABEL = { "見積書": "お見積金額", "納品書": "合計金額", "請求書": "ご請求金額", "領収書": "領収金額", "発注書": "発注金額", "注文書": "注文金額" };
 
   // 書類のスタイル。mm で固定し、表の列幅も固定（PDF で幅がずれないため）
   const CSS = `
@@ -33,6 +34,9 @@
 .sheet thead th{background:var(--c);color:#fff;padding:1.8mm 1.5mm;font-weight:700;text-align:center;border:0.4pt solid var(--c);-webkit-print-color-adjust:exact;print-color-adjust:exact}
 .sheet tbody td{border-bottom:0.4pt solid #9aa5b5;padding:1.8mm 1.5mm;vertical-align:top;word-break:break-all;overflow-wrap:anywhere}
 .sheet tbody tr.blank td{height:7.2mm}
+.sheet tbody tr.sub td{font-weight:700;background:#f2f4f7;border-bottom:0.6pt solid #9aa5b5}
+.sheet tbody tr.neg td{color:#c0392b}
+.sheet .role{font-size:8.5pt;color:#555;margin-bottom:0.5mm}
 .sheet td.n,.sheet th.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
 .sheet td.c{text-align:center}
 .sheet .col-no{width:9mm}.sheet .col-item{width:auto}.sheet .col-qty{width:14mm}.sheet .col-unit{width:14mm}.sheet .col-price{width:26mm}.sheet .col-amt{width:30mm}
@@ -120,10 +124,17 @@
     const kind = doc.kind || "請求書";
     const shown = C.shownAmount(doc, c);
     const minRows = 8;
-    const rows = c.lines.map((l, i) => `<tr><td class="c">${l.rate === 8 ? "※" : ""}${i + 1}</td><td>${esc(l.item)}</td>` +
-      `<td class="n">${l.qty !== "" && l.qty !== undefined ? esc(Number(l.qty).toLocaleString("ja-JP")) : ""}</td><td class="c">${esc(l.unit || "")}</td>` +
-      `<td class="n">${C.yen(l.price)}</td><td class="n">${C.yen(l.amount)}</td></tr>`).join("")
-      + Array.from({ length: Math.max(0, minRows - c.lines.length) }, () => `<tr class="blank"><td></td><td></td><td></td><td></td><td></td><td></td></tr>`).join("");
+    // 行：品目は番号つき、小計行は太字で直前の小計からの合計、値引き（負の金額）は赤
+    const subs = new Map(C.subtotals(doc.lines).map(s => [s.index, s.amount]));
+    let n = 0, printed = 0;
+    const rows = (doc.lines || []).map((l, i) => {
+      if (C.isSubtotal(l)) { printed++; return `<tr class="sub"><td></td><td>${esc(l.item || "小計")}</td><td></td><td></td><td></td><td class="n">${C.yen(subs.get(i) || 0)}</td></tr>`; }
+      if (!l || !String(l.item || "").trim()) return "";
+      const amt = C.lineAmount(l); n++; printed++;
+      return `<tr${amt < 0 ? ' class="neg"' : ""}><td class="c">${l.rate === 8 ? "※" : ""}${n}</td><td>${esc(l.item)}</td>` +
+        `<td class="n">${l.qty !== "" && l.qty !== undefined ? esc(Number(l.qty).toLocaleString("ja-JP")) : ""}</td><td class="c">${esc(l.unit || "")}</td>` +
+        `<td class="n">${C.yen(l.price)}</td><td class="n">${C.yen(amt)}</td></tr>`;
+    }).join("") + Array.from({ length: Math.max(0, minRows - printed) }, () => `<tr class="blank"><td></td><td></td><td></td><td></td><td></td><td></td></tr>`).join("");
     const sums = [["小計（税抜）", c.base]];
     if (taxable) c.byRate.forEach(g => sums.push([`消費税（${g.rate}%）`, g.tax]));
     sums.push(["合計", c.total, !doc.wh]);
@@ -134,19 +145,20 @@
     let foot = "";
     if (kind === "請求書") foot = `<div class="box">${me.bank ? `<div>お振込先：${br(me.bank)}</div>` : ""}${doc.due ? `<div>お支払期限：${C.fmtDate(doc.due)}</div>` : ""}<div class="note">恐れ入りますが、振込手数料はご負担をお願いいたします。</div></div>`;
     else if (kind === "見積書") foot = doc.due ? `<div>有効期限：${C.fmtDate(doc.due)}</div>` : "";
+    else if (kind === "発注書" || kind === "注文書") foot = doc.due ? `<div>納期：${C.fmtDate(doc.due)}</div>` : "";
     else if (kind === "領収書") foot = `<div>但し、${esc(doc.subject || "お品代")}として</div>` + (shown >= 50000 ? `<div class="stamp-area">収入印紙（紙で渡す場合）：</div>` : "");
     const regLine = taxable && me.reg ? `<div>登録番号 ${esc(C.normalizeRegNo(me.reg))}</div>` : "";
     return `<div class="sheet ${opt.color === "mono" ? "mono" : ""}" style="--c:${color}">
-<h1>${TITLE[kind] || esc(kind)}</h1>
+<h1>${(opt.go && GO[kind]) || TITLE[kind] || esc(kind)}</h1>
 <div class="top">
   <div class="left">
-    <div class="to">${esc(doc.to || "（取引先名）")}<small>${esc(doc.honor || "御中")}</small></div>
+    ${kind === "発注書" || kind === "注文書" ? '<div class="role">受注者</div>' : ""}<div class="to">${esc(doc.to || "（取引先名）")}<small>${esc(doc.honor || "御中")}</small></div>
     ${doc.subject && kind !== "領収書" ? `<div>件名：${esc(doc.subject)}</div>` : ""}
     <div>${GREET[kind] || ""}</div>
   </div>
   <div class="right">
     <div class="meta">${doc.no ? `<div>No. ${esc(doc.no)}</div>` : ""}${doc.date ? `<div>発行日 ${C.fmtDate(doc.date)}</div>` : ""}</div>
-    <div class="me">${opt.logo ? `<img class="logo" src="${esc(opt.logo)}" alt="">` : ""}<b>${esc(me.name || "")}</b>${me.addr ? `<div>${br(me.addr)}</div>` : ""}${me.tel ? `<div>TEL ${esc(me.tel)}</div>` : ""}${me.mail ? `<div>${esc(me.mail)}</div>` : ""}${regLine}</div>
+    <div class="me">${kind === "発注書" || kind === "注文書" ? '<div class="role">発注者</div>' : ""}${opt.logo ? `<img class="logo" src="${esc(opt.logo)}" alt="">` : ""}<b>${esc(me.name || "")}</b>${me.addr ? `<div>${br(me.addr)}</div>` : ""}${me.tel ? `<div>TEL ${esc(me.tel)}</div>` : ""}${me.mail ? `<div>${esc(me.mail)}</div>` : ""}${regLine}</div>
     ${sealHtml(opt.seal)}
   </div>
 </div>

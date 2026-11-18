@@ -1,7 +1,9 @@
 /* 画面に関係しない処理（請求書ラクラク）。Node からも require できる */
 (function (root) {
-  const KINDS = ["見積書", "納品書", "請求書", "領収書"];
-  const PREFIX = { "見積書": "Q", "納品書": "D", "請求書": "I", "領収書": "R" };
+  const KINDS = ["見積書", "納品書", "請求書", "領収書", "発注書", "注文書"];
+  const PREFIX = { "見積書": "Q", "納品書": "D", "請求書": "I", "領収書": "R", "発注書": "PO", "注文書": "OR" };
+  const TRASH_DAYS = 30;                     // 最近削除：30 日たったら消す
+  const isSubtotal = l => !!l && l.type === "subtotal";
   const FREE_DOCS = 3;                       // 無料で作れる書類の累計
   const WH_LIMIT = 1000000;                  // 源泉徴収：100万円以下 10.21%、超える部分 20.42%（国税庁 No.2798）
   const REG_RE = /^T\d{13}$/;                // インボイス登録番号：T＋13桁
@@ -32,7 +34,7 @@
   function calc(lines, opt = {}) {
     const taxable = opt.taxable !== false;
     const rounding = opt.rounding || "floor";
-    const ls = (lines || []).filter(l => l && String(l.item || "").trim());
+    const ls = (lines || []).filter(l => l && !isSubtotal(l) && String(l.item || "").trim());
     const groups = new Map();
     let exempt = 0;
     ls.forEach(l => {
@@ -54,6 +56,16 @@
   // 書類に大きく出す金額（請求書で源泉徴収するときは差引額）
   const shownAmount = (doc, c) => doc.kind === "請求書" && doc.wh ? c.net : c.total;
 
+  // 小計行：直前の小計行（または先頭）からその行までの金額を足す。{ index, amount } の一覧（品目名が空の行は飛ばす）
+  function subtotals(lines) {
+    const out = []; let run = 0;
+    (lines || []).forEach((l, i) => {
+      if (isSubtotal(l)) { out.push({ index: i, amount: run }); run = 0; }
+      else if (l && String(l.item || "").trim()) run += lineAmount(l);
+    });
+    return out;
+  }
+
   // 書類番号：接頭 + 年 + 連番（その接頭・年の中で最大＋1）。例 I-2026-001
   function nextNo(docs, kind, settings = {}, now = new Date()) {
     const prefix = (settings.prefix && settings.prefix[kind]) || PREFIX[kind] || "N";
@@ -71,7 +83,7 @@
   function defaultDue(kind, dateStr) {
     const d = parse(dateStr);
     if (kind === "請求書") { const e = new Date(d.getFullYear(), d.getMonth() + 2, 0); return toDate(e.getFullYear(), e.getMonth() + 1, e.getDate()); }
-    if (kind === "見積書") { const e = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 30); return toDate(e.getFullYear(), e.getMonth() + 1, e.getDate()); }
+    if (kind === "見積書" || kind === "発注書" || kind === "注文書") { const e = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 30); return toDate(e.getFullYear(), e.getMonth() + 1, e.getDate()); }
     return "";
   }
 
@@ -95,15 +107,37 @@
   // バックアップ：取引先・品目・自分の情報・設定も含めて 1 つの JSON に（印影・ロゴの画像も入る）
   function backup(data, now = new Date()) {
     return JSON.stringify({ app: "seikyusho-app", version: 1, exported: now.toISOString(),
-      docs: data.docs || [], clients: data.clients || [], items: data.items || [], me: data.me || {}, settings: data.settings || {} });
+      docs: data.docs || [], trash: data.trash || [], clients: data.clients || [], items: data.items || [], me: data.me || {}, settings: data.settings || {} });
   }
   function restore(text) {
     let d;
     try { d = JSON.parse(text); } catch (e) { throw new Error("バックアップのファイルではありません"); }
     if (!d || d.app !== "seikyusho-app" || !Array.isArray(d.docs)) throw new Error("このアプリのバックアップではありません");
     const docs = d.docs.filter(x => x && x.id && KINDS.includes(x.kind)).map(x => Object.assign({ lines: [], paid: false, honor: "御中" }, x));
-    return { docs, clients: Array.isArray(d.clients) ? d.clients : [], items: Array.isArray(d.items) ? d.items : [], me: d.me || {}, settings: d.settings || {} };
+    return { docs, trash: Array.isArray(d.trash) ? d.trash : [], clients: Array.isArray(d.clients) ? d.clients : [], items: Array.isArray(d.items) ? d.items : [], me: d.me || {}, settings: d.settings || {} };
   }
+  // 最近削除：削除した書類は 30 日残し、設定から戻せる
+  const purgeTrash = (trash, now = new Date()) => (trash || []).filter(t => t && t.deletedAt && (now - new Date(t.deletedAt)) / 864e5 <= TRASH_DAYS);
+  const trashDaysLeft = (t, now = new Date()) => Math.max(0, TRASH_DAYS - Math.floor((now - new Date(t.deletedAt)) / 864e5));
+
+  // 一覧の検索：取引先・件名・番号・備考・品目名
+  function matchDoc(doc, q) {
+    const s = String(q || "").trim(); if (!s) return true;
+    const hay = [doc.to, doc.subject, doc.no, doc.memo, ...(doc.lines || []).map(l => l.item)].map(x => String(x || "")).join("\n");
+    return hay.includes(s);
+  }
+
+  // 売上一覧の CSV（確定申告の売上帳向け。年で絞る。Excel 用に BOM 付き）
+  function salesCsv(docs, year, opt = {}) {
+    const q = v => '"' + String(v ?? "").replace(/"/g, '""') + '"';
+    const head = ["日付", "種類", "番号", "取引先", "件名", "税抜", "消費税", "源泉徴収", "税込", "差引", "入金"];
+    const rows = (docs || []).filter(d => String(d.date || "").startsWith(String(year))).sort((a, b) => (a.date + a.no).localeCompare(b.date + b.no)).map(d => {
+      const c = calc(d.lines, Object.assign({}, opt, { withholding: !!d.wh }));
+      return [d.date, d.kind, d.no, d.to, d.subject, c.base, c.tax, c.wh, c.total, c.net, d.kind === "請求書" ? (d.paid ? "済" : "未") : ""].map(q).join(",");
+    });
+    return "\ufeff" + [head.map(q).join(","), ...rows].join("\r\n") + "\r\n";
+  }
+
   // 復元の「追加」：同じ番号・同じ種類の書類は重ねない
   function mergeDocs(current, incoming) {
     const have = new Set(current.map(d => d.kind + "|" + d.no));
@@ -182,6 +216,6 @@
     return bad;
   }
 
-  const api = { KINDS, PREFIX, FREE_DOCS, COLORS, WH_LIMIT, roundBy, lineAmount, calc, shownAmount, nextNo, defaultDue, isRegNo, normalizeRegNo, convert, canCreate, freeLeft, backup, restore, mergeDocs, sealLines, sealSquareText, SEAL_FONTS, SEAL_PRESETS, sealPreset, sealCenterDefault, groupByMonth, recentClients, recentItems, shouldAskReview, backupWarning, validate, fmtDate, yen };
+  const api = { KINDS, PREFIX, FREE_DOCS, TRASH_DAYS, isSubtotal, subtotals, purgeTrash, trashDaysLeft, matchDoc, salesCsv, COLORS, WH_LIMIT, roundBy, lineAmount, calc, shownAmount, nextNo, defaultDue, isRegNo, normalizeRegNo, convert, canCreate, freeLeft, backup, restore, mergeDocs, sealLines, sealSquareText, SEAL_FONTS, SEAL_PRESETS, sealPreset, sealCenterDefault, groupByMonth, recentClients, recentItems, shouldAskReview, backupWarning, validate, fmtDate, yen };
   if (typeof module !== "undefined" && module.exports) module.exports = api; else root.SeikyushoCore = api;
 })(typeof window !== "undefined" ? window : globalThis);
