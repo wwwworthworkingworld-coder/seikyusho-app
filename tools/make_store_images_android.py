@@ -16,7 +16,7 @@ BOLD = r"C:\Windows\Fonts\meiryob.ttc"
 TOP, BOTTOM = (63, 81, 181), (38, 48, 120)
 ROOT = Path(__file__).parent.parent
 SHOTS = [
-    ("1_preview", "?seed=1&shot=1&open=preview", ["スマホだけで", "請求書をPDFに"], "見積書・納品書・請求書・領収書。内税・インボイス・源泉徴収も"),
+    ("1_preview", "?seed=1&shot=1&open=preview", ["スマホだけで", "請求書をPDFに"], "見積・納品・請求・領収。内税・インボイス・源泉徴収も"),
     ("2_edit", "?seed=1&shot=1&open=1", ["3タップで1枚", "取引先と品目はタップで"], "住所・担当者も宛名に。入力のたびに自動保存"),
     ("3_list", "?seed=1&shot=1", ["データは消えない", "未入金も一目で"], "バックアップで機種変更でも安心。期限超過は赤で"),
     ("4_settings", "?seed=1&shot=1&to=colorChips#settings", ["印影・ロゴ・色テンプレ", "買い切り2,500円"], "印影 6 種とロゴを自動で。サブスクではありません"),
