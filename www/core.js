@@ -103,6 +103,15 @@
   // 無料の枚数：保存した書類の累計（settings.created）が FREE_DOCS 未満なら新しく作れる
   const canCreate = (settings, purchased) => !!purchased || (Number(settings && settings.created) || 0) < FREE_DOCS;
   const freeLeft = settings => Math.max(0, FREE_DOCS - (Number(settings && settings.created) || 0));
+  // 審査用の解除（Android 版だけ）。購入とは別のフラグ settings.reviewUnlocked。iOS・パソコンでは常に無効
+  const reviewUnlocked = (settings, platform) => platform === "android" && !!(settings && settings.reviewUnlocked);
+  // ネイティブ側の照合結果 matched を受けて、Android のときだけフラグを立てる。それ以外は何も変えない
+  function applyReviewCode(settings, platform, matched) {
+    if (platform !== "android" || !matched) return false;
+    settings.reviewUnlocked = true; return true;
+  }
+  // 有料機能が使えるか：購入済み、または審査用に解除中
+  const isPro = (settings, purchased, platform) => !!purchased || reviewUnlocked(settings, platform);
 
   // バックアップ：取引先・品目・自分の情報・設定も含めて 1 つの JSON に（印影・ロゴの画像も入る）
   function backup(data, now = new Date()) {
@@ -216,6 +225,6 @@
     return bad;
   }
 
-  const api = { KINDS, PREFIX, FREE_DOCS, TRASH_DAYS, isSubtotal, subtotals, purgeTrash, trashDaysLeft, matchDoc, salesCsv, COLORS, WH_LIMIT, roundBy, lineAmount, calc, shownAmount, nextNo, defaultDue, isRegNo, normalizeRegNo, convert, canCreate, freeLeft, backup, restore, mergeDocs, sealLines, sealSquareText, SEAL_FONTS, SEAL_PRESETS, sealPreset, sealCenterDefault, groupByMonth, recentClients, recentItems, shouldAskReview, backupWarning, validate, fmtDate, yen };
+  const api = { KINDS, PREFIX, FREE_DOCS, TRASH_DAYS, isSubtotal, subtotals, purgeTrash, trashDaysLeft, matchDoc, salesCsv, COLORS, WH_LIMIT, roundBy, lineAmount, calc, shownAmount, nextNo, defaultDue, isRegNo, normalizeRegNo, convert, canCreate, freeLeft, reviewUnlocked, applyReviewCode, isPro, backup, restore, mergeDocs, sealLines, sealSquareText, SEAL_FONTS, SEAL_PRESETS, sealPreset, sealCenterDefault, groupByMonth, recentClients, recentItems, shouldAskReview, backupWarning, validate, fmtDate, yen };
   if (typeof module !== "undefined" && module.exports) module.exports = api; else root.SeikyushoCore = api;
 })(typeof window !== "undefined" ? window : globalThis);

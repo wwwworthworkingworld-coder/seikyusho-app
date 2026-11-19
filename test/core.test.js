@@ -310,6 +310,31 @@ t("ロゴ：全 10 型 × 8 色 × 3 書体 × 屋号 4 種（2 字・12 字・�
   const texts = (sv.match(/<text [^>]*>[^<]*<\/text>/g) || []).map(t2 => Lg.logoBounds(`<svg>${t2}</svg>`));
   assert.ok(texts[0].x1 <= 107 && texts[1].x0 >= 109, JSON.stringify(texts));
 });
+t("審査用コード：ネイティブの照合が一致したら Android だけ解除。iOS・web では一致しても無効、購入フラグとは別", () => {
+  const s1 = settings();
+  assert.strictEqual(C.applyReviewCode(s1, "android", true), true); assert.strictEqual(s1.reviewUnlocked, true);
+  assert.strictEqual(C.isPro(s1, false, "android"), true); assert.strictEqual(C.canCreate(s1, C.isPro(s1, false, "android")), true);
+  const s2 = settings();
+  assert.strictEqual(C.applyReviewCode(s2, "ios", true), false); assert.strictEqual(s2.reviewUnlocked, undefined);
+  assert.strictEqual(C.applyReviewCode(s2, "web", true), false); assert.strictEqual(C.applyReviewCode(s2, "android", false), false);
+  assert.strictEqual(C.isPro(s2, false, "ios"), false);
+  // 解除フラグが入ったバックアップを iOS で読んでも有料にならない
+  const s3 = { reviewUnlocked: true, created: 5 }; assert.strictEqual(C.isPro(s3, false, "ios"), false); assert.strictEqual(C.isPro(s3, false, "android"), true);
+  assert.strictEqual(C.isPro(s3, true, "ios"), true);
+});
+t("審査用コード：コードの文字列は www（iOS バンドル）に入っていない。Java は SHA-256 だけを持つ", () => {
+  const fs = require("fs"), path = require("path"), crypto = require("crypto");
+  const java = fs.readFileSync(path.join(__dirname, "../plugins/seikyusho-store/android/src/main/java/com/company256/seikyusho/store/SeikyushoStorePlugin.java"), "utf8");
+  const m = java.match(/REVIEW_CODE_SHA256 = "([0-9a-f]{64})"/); assert.ok(m, "Java にハッシュがない");
+  const secret = path.join(__dirname, "../../store/審査用コード_非公開.md");
+  if (!fs.existsSync(secret)) { console.log("    （非公開ファイルがないので文字列の照合は省略）"); return; }
+  const code = (fs.readFileSync(secret, "utf8").match(/`([A-Z0-9]{12})`/) || [])[1]; assert.ok(code, "非公開ファイルにコードがない");
+  assert.strictEqual(crypto.createHash("sha256").update(code).digest("hex"), m[1], "ハッシュが一致しない");
+  for (const f of fs.readdirSync(path.join(__dirname, "../www"))) {
+    const p = path.join(__dirname, "../www", f); if (fs.statSync(p).isFile()) assert.ok(!fs.readFileSync(p, "utf8").includes(code), f + " にコードが入っている");
+  }
+  assert.ok(!fs.readFileSync(path.join(__dirname, "../plugins/seikyusho-store/ios/Sources/SeikyushoStorePlugin/SeikyushoStorePlugin.swift"), "utf8").includes(code));
+});
 t("ロゴ：同じ seed なら同じ案、違う seed なら別の案が出る。長い屋号は文字が小さくなる", () => {
   assert.deepStrictEqual(Lg.randomSpec(42), Lg.randomSpec(42));
   const specs = new Set(Array.from({ length: 30 }, (_, i) => JSON.stringify(Lg.randomSpec(i + 1))));

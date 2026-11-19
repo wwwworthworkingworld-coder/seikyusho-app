@@ -48,7 +48,9 @@
 
   let data = await load();
   let cur = null;              // 編集中の書類（data.docs の中のオブジェクト）
-  let purchased = false;
+  let purchased = false;   // 有料機能が使えるか（購入済み、または Android の審査用解除）
+  let bought = false;      // 実際に購入済みか（復元・購入の処理はこちらだけ見る）
+  const refreshPro = () => { purchased = C.isPro(data.settings, bought, platform); };
   let kindFilter = "", search = "";
   let tId;
   const years = () => { const s = new Set(data.docs.map(d => +String(d.date || "").slice(0, 4)).filter(Boolean)); s.add(+today().slice(0, 4)); return [...s].sort((a, b) => b - a); };
@@ -555,25 +557,26 @@
     $("buyCard").hidden = purchased && false;
     $("buyNote").textContent = purchased ? "購入済みです。書類は無制限、印影・ロゴ・色テンプレが使えます。ありがとうございます。"
       : `無料で作れる書類は 3 枚まで（あと ${C.freeLeft(data.settings)} 枚）。購入すると書類が無制限になり、印影・ロゴ・色テンプレ 5 色が使えます。1 回の購入でずっと使えます。`;
-    $("buyBtn").hidden = purchased; $("restoreBtn").hidden = purchased;
+    if (!bought && purchased) $("buyNote").textContent = "審査用に解除中です（この端末だけ）。購入状態ではありません。";
+    $("buyBtn").hidden = bought; $("restoreBtn").hidden = bought;
     $("buyBtn").textContent = priceText ? `${priceText} で購入する` : "購入する";
     $("payBuy").textContent = $("buyBtn").textContent;
   }
   async function checkPurchased() {
     try {
-      if (!store()) { purchased = !native; renderBadge(); return; }   // パソコンのブラウザーでは購入済みとして動かす
+      if (!store()) { bought = !native; refreshPro(); renderBadge(); return; }   // パソコンのブラウザーでは購入済みとして動かす
       const r = await store().isPurchased({ productId: PRODUCT_ID });
-      purchased = !!r.purchased;
-      if (!purchased) { const p = await store().getProduct({ productId: PRODUCT_ID }); if (p && p.price) priceText = p.price; }
-    } catch (e) { purchased = false; }
-    renderBadge(); renderBuy();
+      bought = !!r.purchased;
+      if (!bought) { const p = await store().getProduct({ productId: PRODUCT_ID }); if (p && p.price) priceText = p.price; }
+    } catch (e) { bought = false; }
+    refreshPro(); renderBadge(); renderBuy();
   }
   async function buy() {
     if (!store()) { toast("この環境では購入できません"); return; }
     $("buyBtn").disabled = $("payBuy").disabled = true;
     try {
       const r = await store().purchase({ productId: PRODUCT_ID });
-      if (r.state === "purchased") { purchased = true; closePay(); toast("ありがとうございます。無制限・印影・テンプレが使えます"); }
+      if (r.state === "purchased") { bought = true; refreshPro(); closePay(); toast("ありがとうございます。無制限・印影・テンプレが使えます"); }
       else if (r.state === "pending") toast("承認待ちです。承認されると使えるようになります");
     } catch (e) { toast("購入できませんでした"); }
     $("buyBtn").disabled = $("payBuy").disabled = false;
@@ -581,12 +584,32 @@
   }
   async function restorePurchase() {
     if (!store()) return;
-    try { const r = await store().restore({ productId: PRODUCT_ID }); purchased = !!r.purchased; toast(purchased ? "購入を復元しました" : "この Apple アカウントでの購入は見つかりませんでした"); if (purchased) closePay(); }
+    try { const r = await store().restore({ productId: PRODUCT_ID }); bought = !!r.purchased; refreshPro(); toast(bought ? "購入を復元しました" : (platform === "android" ? "この Google アカウントでの購入は見つかりませんでした" : "この Apple アカウントでの購入は見つかりませんでした")); if (bought) closePay(); }
     catch (e) { toast("復元できませんでした"); }
     renderBadge(); renderBuy(); if (!$("tab-settings").hidden) renderSettings();
   }
   $("buyBtn").onclick = $("payBuy").onclick = buy;
   $("restoreBtn").onclick = $("payRestore").onclick = restorePurchase;
+
+  // ---- 審査用コード（Android 版だけ）。設定の「購入を復元する」を長押し（1.2 秒）か 5 回続けてタップで入力欄を出す。
+  // コードの照合はネイティブ側（SHA-256 だけを持つ）。iOS にはこのメソッド自体がないので何も起きない。
+  if (platform === "android") {
+    let taps = 0, tapTimer = 0, pressTimer = 0;
+    const b = $("restoreBtn");
+    const askCode = async () => {
+      if (!P.SeikyushoStore || !P.SeikyushoStore.checkReviewCode) return;
+      const code = window.prompt("審査用コード");
+      if (!code) return;
+      try {
+        const r = await P.SeikyushoStore.checkReviewCode({ code });
+        if (C.applyReviewCode(data.settings, platform, r && r.ok)) { await save(true); refreshPro(); toast("審査用に解除しました（この端末だけ）"); renderBadge(); renderBuy(); if (!$("tab-settings").hidden) renderSettings(); }
+        else toast("コードが違います");
+      } catch (e) { toast("確認できませんでした"); }
+    };
+    b.addEventListener("click", () => { taps++; clearTimeout(tapTimer); tapTimer = setTimeout(() => { taps = 0; }, 2500); if (taps >= 5) { taps = 0; askCode(); } });
+    b.addEventListener("pointerdown", () => { pressTimer = setTimeout(askCode, 1200); });
+    ["pointerup", "pointerleave", "pointercancel"].forEach(ev => b.addEventListener(ev, () => clearTimeout(pressTimer)));
+  }
   function openPay(title) { $("payTitle").textContent = title; $("payModal").hidden = false; renderBuy(); }
   function closePay() { $("payModal").hidden = true; }
   $("payLater").onclick = closePay;

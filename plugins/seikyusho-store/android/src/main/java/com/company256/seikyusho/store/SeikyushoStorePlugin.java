@@ -79,6 +79,23 @@ public class SeikyushoStorePlugin extends Plugin implements PurchasesUpdatedList
     @PluginMethod
     public void restore(final PluginCall call) { isPurchased(call); }
 
+    // 審査用コード（Android 版だけ）。Google Play の審査員が有料部分を確かめるためのもの。
+    // コードそのものは持たず SHA-256 だけを持つ。一致しても購入状態には触れない（JS 側が別のフラグで扱う）。
+    private static final String REVIEW_CODE_SHA256 = "ee4d5bfb9484afbab2f55923e79cc07f9fe4ad721854377429953f7f05a06e4b";
+
+    @PluginMethod
+    public void checkReviewCode(final PluginCall call) {
+        String code = call.getString("code", "").trim().toUpperCase();
+        boolean ok = false;
+        try {
+            java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
+            StringBuilder hex = new StringBuilder();
+            for (byte b : md.digest(code.getBytes(java.nio.charset.StandardCharsets.UTF_8))) hex.append(String.format("%02x", b));
+            ok = hex.toString().equals(REVIEW_CODE_SHA256);
+        } catch (Exception e) { ok = false; }
+        JSObject ret = new JSObject(); ret.put("ok", ok); call.resolve(ret);
+    }
+
     @PluginMethod
     public void getProduct(final PluginCall call) {
         final String id = call.getString("productId", "");

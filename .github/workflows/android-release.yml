@@ -3,6 +3,11 @@ name: Android release
 # PLAY_SERVICE_ACCOUNT_JSON があれば Google Play の内部テストに自動で送る。無ければ AAB を artifact に置くので、Play Console に手でアップロードする。
 on:
   workflow_dispatch:
+    inputs:
+      versionCode:
+        description: "versionCode（Play に上げるたびに 1 ずつ増やす。空なら実行番号）"
+        required: false
+        default: ""
 
 jobs:
   release:
@@ -31,11 +36,12 @@ jobs:
           KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          VERSION_CODE: ${{ inputs.versionCode }}
         run: |
           cd android
           chmod +x gradlew
           ./gradlew bundleRelease --no-daemon -q \
-            -PversionCode=$GITHUB_RUN_NUMBER \
+            -PversionCode=${VERSION_CODE:-$GITHUB_RUN_NUMBER} \
             -Pandroid.injected.signing.store.file="$RUNNER_TEMP/upload.keystore" \
             -Pandroid.injected.signing.store.password="$KS_PASS" \
             -Pandroid.injected.signing.key.alias="$KEY_ALIAS" \
