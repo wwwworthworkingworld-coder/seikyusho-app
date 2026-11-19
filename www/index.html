@@ -17,12 +17,12 @@
       <div class="card hero" id="emptyDocs" hidden>
         <h2>はじめての書類を作りましょう</h2>
         <ul class="bullets">
-          <li>見積書・納品書・請求書・領収書を、iPhone だけで A4 の PDF に。</li>
-          <li>保存はこの iPhone の中だけ。会員登録も通信もありません。</li>
+          <li>見積書・納品書・請求書・領収書を、スマホだけで A4 の PDF に。</li>
+          <li>保存はこのスマホの中だけ。会員登録も通信もありません。</li>
           <li>「バックアップを書き出す」でファイルに残せるので、機種変更でも消えません。</li>
         </ul>
         <button class="primary" type="button" id="firstCreate">請求書を作ってみる</button>
-        <p class="note">先に「設定」で屋号・住所・振込先を入れておくと、書類に自動で入ります。</p>
+        <p class="note">発行者（あなた）の屋号・住所・振込先は、作る画面の上の案内から入れられます。</p>
       </div>
       <div id="docsBody">
         <div class="chips filter" id="kindFilter"></div>
@@ -33,18 +33,26 @@
 
     <!-- 作る（編集） -->
     <section id="tab-edit" class="tab" hidden>
+      <button class="warn band" type="button" id="meBand" hidden>発行者（あなた）の情報が未設定です <b>→ 入れる</b></button>
       <div class="card form">
         <div>
           <label>種類</label>
           <div class="chips" id="kindChips"></div>
         </div>
         <div>
-          <label for="to">取引先 <small>最近の取引先はタップで入ります</small></label>
+          <label for="to">取引先 <small id="clientHint">登録した取引先はタップで入ります</small></label>
           <div class="chips" id="clientChips"></div>
           <div class="row-to">
             <input id="to" type="text" maxlength="40" placeholder="例：見本商事" autocomplete="off">
             <select id="honor" aria-label="敬称"><option>御中</option><option>様</option></select>
           </div>
+          <details class="more" id="toMore">
+            <summary>住所・担当者を入れる <small>任意。書類の宛名に入ります</small></summary>
+            <div class="form tight">
+              <div class="row-zip"><input id="toZip" type="text" inputmode="numeric" maxlength="8" placeholder="郵便番号"><input id="toAddr" type="text" maxlength="80" placeholder="住所"></div>
+              <div class="row2"><input id="toDept" type="text" maxlength="30" placeholder="部署"><input id="toPerson" type="text" maxlength="20" placeholder="担当者（「様」は自動）"></div>
+            </div>
+          </details>
         </div>
         <div class="row2">
           <div><label for="date">発行日</label><input id="date" type="date"></div>
@@ -64,9 +72,11 @@
           <button class="secondary" type="button" id="addSubtotal">＋ 小計</button>
           <button class="secondary" type="button" id="addDiscount">＋ 値引き</button>
         </div>
+        <p class="note tight">数量と単価を空にした行は見出しになります（金額を印字しません）。</p>
       </div>
 
       <div class="card form">
+        <label class="switch"><span>単価は税込で入れる（内税） <small>税込の合計から税率ごとに消費税を逆算します</small></span><input id="inclusive" type="checkbox"></label>
         <label class="switch"><span>源泉徴収税額を書く <small>相手が個人への報酬から差し引くとき（原稿料・デザイン料など）</small></span><input id="wh" type="checkbox"></label>
         <div><label for="memo">備考 <small>任意</small></label><textarea id="memo" rows="2" maxlength="300" placeholder="例：いつもありがとうございます。"></textarea></div>
       </div>
@@ -85,11 +95,13 @@
       <div class="card form">
         <h2>自分の情報 <small>書類の右上に入ります</small></h2>
         <div><label for="me_name">屋号・名前</label><input id="me_name" type="text" maxlength="40" placeholder="例：サンプル工房"></div>
+        <div><label for="me_person">担当者名 <small>任意。屋号の下に「担当：○○」</small></label><input id="me_person" type="text" maxlength="30" placeholder="例：見本 太郎"></div>
         <div><label for="me_addr">住所</label><textarea id="me_addr" rows="2" maxlength="120" placeholder="例：〒000-0000 東京都○○区○○ 1-2-3"></textarea></div>
         <div class="row2">
           <div><label for="me_tel">電話番号</label><input id="me_tel" type="tel" maxlength="20"></div>
-          <div><label for="me_mail">メール</label><input id="me_mail" type="email" maxlength="60"></div>
+          <div><label for="me_fax">FAX <small>任意</small></label><input id="me_fax" type="tel" maxlength="20"></div>
         </div>
+        <div><label for="me_mail">メール</label><input id="me_mail" type="email" maxlength="60"></div>
         <div>
           <label for="me_reg">インボイス登録番号 <small>T＋13桁。未登録なら空欄</small></label>
           <input id="me_reg" type="text" maxlength="16" placeholder="T1234567890123" autocapitalize="characters">
@@ -131,15 +143,37 @@
       </div>
 
       <div class="card form">
+        <h2>取引先 <small>書類に入れた取引先がここにたまります</small></h2>
+        <ul class="list clients" id="clientList"></ul>
+        <div class="form tight" id="clientEdit" hidden>
+          <div class="row-to"><input id="cl_name" type="text" maxlength="40" placeholder="取引先名"><select id="cl_honor" aria-label="敬称"><option>御中</option><option>様</option></select></div>
+          <div class="row-zip"><input id="cl_zip" type="text" inputmode="numeric" maxlength="8" placeholder="郵便番号"><input id="cl_addr" type="text" maxlength="80" placeholder="住所"></div>
+          <div class="row2"><input id="cl_dept" type="text" maxlength="30" placeholder="部署"><input id="cl_person" type="text" maxlength="20" placeholder="担当者"></div>
+          <div class="row2"><button class="secondary small" type="button" id="cl_cancel">閉じる</button><button class="primary small" type="button" id="cl_save">保存</button></div>
+          <p class="note tight">名前を変えても、すでに作った書類はそのままです。</p>
+        </div>
+      </div>
+
+      <div class="card form">
+        <h2>書類の文言</h2>
+        <div id="textRows"></div>
+        <div><label for="txt_fee">請求書の振込手数料の一文 <small>空にすると出ません</small></label><input id="txt_fee" type="text" maxlength="80"></div>
+        <div><label for="txt_memo">備考の既定文 <small>新しい書類の備考に最初から入ります</small></label><textarea id="txt_memo" rows="2" maxlength="300" placeholder="例：いつもありがとうございます。"></textarea></div>
+      </div>
+
+      <div class="card form">
         <h2>税と番号</h2>
         <div>
           <label>消費税の端数 <small>税率ごとに合計してから 1 回</small></label>
           <div class="chips" id="roundChips"></div>
         </div>
+        <label class="switch"><span>新しい書類は内税（単価が税込）で始める <small>書類ごとに切り替えられます</small></span><input id="inclusiveDefault" type="checkbox"></label>
         <div>
-          <label>税率の選択肢 <small>品目ごとに選べる税率</small></label>
+          <label>税率の選択肢 <small>品目ごとに選べる税率。タップで既定に</small></label>
           <div class="chips" id="rateChips"></div>
           <div class="row-add"><input id="newRate" type="number" inputmode="decimal" min="0" max="100" step="0.1" placeholder="例：5"><button class="secondary small" type="button" id="addRate">税率を追加</button></div>
+          <div id="reducedRows" class="reduced"></div>
+          <p class="note tight">軽減税率をオンにした税率の品目には「※」が付き、内訳に「※は軽減税率対象」と書きます。</p>
         </div>
         <div>
           <label>番号の形 <small>接頭 - 年 - 連番</small></label>
@@ -151,7 +185,8 @@
 
       <div class="card">
         <h2>売上の一覧を CSV で書き出す</h2>
-        <p class="note">年で絞って、日付・種類・番号・取引先・件名・税抜・消費税・源泉徴収・税込・差引・入金の一覧を CSV にします。確定申告の売上帳や、当社の帳簿 Excel に貼れます。</p>
+        <p class="note">年で絞って、日付・種類・番号・取引先・件名・税抜・消費税・源泉徴収・税込・差引・入金・入金日の一覧を CSV にします。確定申告の売上帳や帳簿の Excel に貼れます。</p>
+        <div class="chips" id="csvScope"></div>
         <div class="row2"><select id="csvYear"></select><button class="secondary" type="button" id="csvBtn">CSV を書き出す</button></div>
       </div>
 
@@ -162,7 +197,7 @@
 
       <div class="card">
         <h2>バックアップ</h2>
-        <p class="note">書類・取引先・自分の情報・印影を 1 つのファイルに書き出します。「ファイル」アプリや iCloud Drive、メールに保存しておけば、機種変更やアプリの削除でも消えません。どこにも自動では送られません。</p>
+        <p class="note">書類・取引先・自分の情報・印影を 1 つのファイルに書き出します。「ファイル」アプリやクラウドドライブ、メールに保存しておけば、機種変更やアプリの削除でも消えません。どこにも自動では送られません。</p>
         <p class="note tight" id="lastBackup"></p>
         <button class="secondary" type="button" id="backupBtn">バックアップを書き出す</button>
         <label class="secondary file">バックアップを読み込む<input id="restoreFile" type="file" accept=".json,application/json" hidden></label>
@@ -177,10 +212,10 @@
 
       <div class="card links">
         <h2>このアプリについて</h2>
-        <p class="note">書類はこの iPhone の中だけに保存します。どこにも送信せず、iCloud にも保存しません。会員登録・広告・利用状況の収集はありません。消費税・源泉徴収の計算は国税庁の案内に沿った目安です。最終の確認は税務署・税理士へ。</p>
+        <p class="note">書類はこのスマホの中だけに保存します。どこにも送信せず、クラウドにも保存しません。会員登録・広告・利用状況の収集はありません。消費税・源泉徴収の計算は国税庁の案内に沿った目安です。最終の確認は税務署・税理士へ。</p>
         <button class="row-link" type="button" id="privacyBtn">プライバシーポリシー<span>›</span></button>
         <button class="row-link" type="button" id="supportBtn">お問い合わせ・使い方<span>›</span></button>
-        <button class="row-link" type="button" id="reviewBtn">App Store でレビューを書く<span>›</span></button>
+        <button class="row-link" type="button" id="reviewBtn">ストアでレビューを書く<span>›</span></button>
         <p class="note">提供：株式会社256　バージョン <span id="version">1.0.0</span></p>
       </div>
     </section>
@@ -205,6 +240,7 @@
 <!-- プレビュー（A4 を縮小） -->
 <div class="sheet-modal" id="previewModal" hidden>
   <div class="sm-bar"><button type="button" class="sm-close" id="previewClose">閉じる</button><span>プレビュー</span><span class="sm-pages" id="previewInfo"></span></div>
+  <button class="warn band lock-band" type="button" id="previewLock" hidden>色・印影・ロゴを PDF に入れるには購入（¥2,500・1 回） <b>→ 詳しく</b></button>
   <div class="sm-body" id="previewBody"><div class="sm-wrap" id="previewWrap"><div class="sm-scale" id="previewScale"></div></div></div>
   <div class="sm-foot">
     <div class="chips" id="previewColors"></div>
@@ -218,7 +254,7 @@
   <div class="sm-bar"><button type="button" class="sm-close" id="logoClose">閉じる</button><span>ロゴを自動で作る</span><span class="sm-pages"></span></div>
   <div class="sm-body logo-body">
     <div class="logo-stage" id="logoStage"></div>
-    <p class="note" id="logoHint">屋号から、型・色・書体の組み合わせを作ります。この iPhone の中だけで作り、どこにも送りません。</p>
+    <p class="note" id="logoHint">屋号から、型・色・書体の組み合わせを作ります。このスマホの中だけで作り、どこにも送りません。</p>
     <div class="card form">
       <div><label>色</label><div class="chips" id="logoPalettes"></div></div>
       <div><label>書体</label><div class="chips" id="logoFonts"></div></div>
@@ -233,16 +269,30 @@
   </div>
 </div>
 
+<!-- 初回：発行者（自分）の情報だけを入れる短いシート -->
+<div class="sheet-modal pay" id="meModal" hidden>
+  <div class="pay-box form">
+    <h2>発行者（あなた）の情報</h2>
+    <p class="note">書類の右上に入ります。あとから「設定」で全部変えられます。</p>
+    <div><label for="mm_name">屋号・名前</label><input id="mm_name" type="text" maxlength="40" placeholder="例：サンプル工房"></div>
+    <div><label for="mm_addr">住所 <small>任意</small></label><textarea id="mm_addr" rows="2" maxlength="120" placeholder="例：〒000-0000 東京都○○区○○ 1-2-3"></textarea></div>
+    <div><label for="mm_bank">振込先 <small>請求書に表示。任意</small></label><textarea id="mm_bank" rows="2" maxlength="120" placeholder="例：見本銀行 本店 普通 1234567 サンプルコウボウ"></textarea></div>
+    <div><label for="mm_reg">インボイス登録番号 <small>T＋13桁。未登録なら空欄</small></label><input id="mm_reg" type="text" maxlength="16" placeholder="T1234567890123" autocapitalize="characters"></div>
+    <button class="primary" type="button" id="mm_save">保存する</button>
+    <button class="secondary plain" type="button" id="mm_later">あとで</button>
+  </div>
+</div>
+
 <!-- 購入のシート -->
 <div class="sheet-modal pay" id="payModal" hidden>
   <div class="pay-box">
     <h2 id="payTitle">無料で作れるのは 3 枚までです</h2>
     <ul class="bullets">
       <li><b>書類を無制限に</b>作れます（作った 3 枚もそのまま使えます）</li>
-      <li><b>印影・ロゴ</b>を書類に載せられます</li>
+      <li><b>印影・ロゴ</b>を書類に載せられます。<b>あなたの屋号の印影を自動で作ります</b></li>
       <li><b>色テンプレ 5 色</b>から選べます</li>
     </ul>
-    <p class="note">1 回の購入でずっと使えます。サブスクリプションではありません。書類はこの iPhone の中だけに保存され、どこにも送られません。</p>
+    <p class="note">1 回の購入でずっと使えます。サブスクリプションではありません。書類はこのスマホの中だけに保存され、どこにも送られません。</p>
     <button class="primary" type="button" id="payBuy">購入する</button>
     <button class="secondary" type="button" id="payRestore">購入を復元する</button>
     <button class="secondary plain" type="button" id="payLater">あとで</button>

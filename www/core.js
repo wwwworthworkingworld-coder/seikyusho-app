@@ -8,12 +8,15 @@
   const WH_LIMIT = 1000000;                  // 源泉徴収：100万円以下 10.21%、超える部分 20.42%（国税庁 No.2798）
   const REG_RE = /^T\d{13}$/;                // インボイス登録番号：T＋13桁
   const COLORS = [["navy", "紺", "#1f4e8c"], ["green", "緑", "#1e7f6b"], ["wine", "ワイン", "#8b2942"], ["gray", "グレー", "#4a5568"], ["mono", "モノクロ", "#222222"]];
+  const SALES_KINDS = ["請求書", "領収書"];  // 「売上」として数える種類（見積・納品・発注・注文は数えない：見積→請求で二重になるため）
+  const DEFAULT_REDUCED = [8];               // 軽減税率（※を付ける）の既定。2027-04 の飲食料品の税率引き下げ（国税庁 No.6625 注記）に備えて率ごとに設定できる
 
   const pad = n => String(n).padStart(2, "0");
   const toDate = (y, m, d) => `${y}-${pad(m)}-${pad(d)}`;
   const parse = s => { const [y, m, d] = String(s || "").split("-").map(Number); return new Date(y, (m || 1) - 1, d || 1); };
   const fmtDate = s => s ? `${+s.slice(0, 4)}年${+s.slice(5, 7)}月${+s.slice(8, 10)}日` : "";
   const yen = v => (v < 0 ? "-" : "") + Math.abs(Math.round(v)).toLocaleString("ja-JP");
+  const todayStr = (now = new Date()) => toDate(now.getFullYear(), now.getMonth() + 1, now.getDate());
 
   // 端数処理（消費税は税率ごとに合計してから 1 回だけ。国税庁 インボイス制度 Q&A）
   function roundBy(v, mode) {
@@ -22,17 +25,26 @@
     return Math.floor(v + 1e-9);
   }
 
-  // 1 行の金額（数量×単価。値引きは単価を負にする）
-  const lineAmount = l => Math.round((Number(l.qty) || 0) * (Number(l.price) || 0));
+  const blank = v => v === "" || v === undefined || v === null;
+  // 単価も数量も空の行＝見出し行（金額を印字しない）。単価が空なら金額も空欄
+  const hasPrice = l => !!l && !blank(l.price);
+  // 1 行の金額（数量×単価）。値引き行（discount: true）は正の数で入れて内部で負にする。古いデータの負の単価はそのまま負
+  const lineAmount = l => {
+    if (!l) return 0;
+    const raw = Math.round((Number(l.qty) || 0) * (Number(l.price) || 0));
+    return l.discount ? -Math.abs(raw) : raw;
+  };
 
   /**
    * 金額の計算。
-   * lines: [{item, qty, unit, price, rate}]  rate は % の数（10, 8, 0）。null/"none" は対象外
-   * opt: { taxable: 課税事業者か, rounding: floor|round|ceil, withholding: 源泉徴収するか }
-   * 返り値: byRate [{rate, base, tax}], base(税抜合計), tax, total(税込), wh(源泉徴収税額), net(差引)
+   * lines: [{item, qty, unit, price, rate, discount}]  rate は % の数（10, 8, 0）。null/"none" は対象外
+   * opt: { taxable: 課税事業者か, rounding: floor|round|ceil, withholding: 源泉徴収するか, inclusive: 単価が税込か }
+   * 返り値: byRate [{rate, base, tax, gross}], base(税抜合計), tax, total(税込), wh(源泉徴収税額), net(差引), inclusive
+   * 内税：税率ごとの税込合計 × r ÷ (100 + r) を端数処理 1 回で税額、税抜 ＝ 税込 − 税額。免税なら税額なし（税込＝税抜）
    */
   function calc(lines, opt = {}) {
     const taxable = opt.taxable !== false;
+    const inclusive = !!opt.inclusive;
     const rounding = opt.rounding || "floor";
     const ls = (lines || []).filter(l => l && !isSubtotal(l) && String(l.item || "").trim());
     const groups = new Map();
@@ -43,14 +55,18 @@
       if (r === null) { exempt += amt; return; }
       groups.set(r, (groups.get(r) || 0) + amt);
     });
-    const byRate = [...groups.entries()].sort((a, b) => b[0] - a[0]).map(([rate, base]) => ({ rate, base, tax: taxable ? roundBy(base * rate / 100, rounding) : 0 }));
+    const byRate = [...groups.entries()].sort((a, b) => b[0] - a[0]).map(([rate, sum]) => {
+      if (!taxable) return { rate, base: sum, tax: 0, gross: sum };
+      if (inclusive) { const tax = roundBy(sum * rate / (100 + rate), rounding); return { rate, base: sum - tax, tax, gross: sum }; }
+      const tax = roundBy(sum * rate / 100, rounding); return { rate, base: sum, tax, gross: sum + tax };
+    });
     const base = byRate.reduce((s, g) => s + g.base, 0) + exempt;
     const tax = byRate.reduce((s, g) => s + g.tax, 0);
     const total = base + tax;
     // 源泉徴収は税抜の報酬額を基に計算（請求書に消費税を区分して記載している場合）。1 円未満切り捨て
-    const whBase = Math.max(0, byRate.reduce((s, g) => s + g.base, 0) + exempt);
+    const whBase = Math.max(0, base);
     const wh = opt.withholding ? (whBase <= WH_LIMIT ? Math.floor(whBase * 0.1021) : Math.floor((whBase - WH_LIMIT) * 0.2042) + 102100) : 0;
-    return { byRate, exempt, base, tax, total, wh, net: total - wh, lines: ls.map(l => Object.assign({}, l, { amount: lineAmount(l) })) };
+    return { byRate, exempt, base, tax, total, wh, net: total - wh, inclusive, lines: ls.map(l => Object.assign({}, l, { amount: lineAmount(l) })) };
   }
 
   // 書類に大きく出す金額（請求書で源泉徴収するときは差引額）
@@ -66,6 +82,18 @@
     return out;
   }
 
+  // 品目行の並べ替え・複製（新しい配列を返す）
+  function moveLine(lines, i, dir) {
+    const j = i + dir; const a = (lines || []).slice();
+    if (i < 0 || i >= a.length || j < 0 || j >= a.length) return a;
+    [a[i], a[j]] = [a[j], a[i]]; return a;
+  }
+  function duplicateLine(lines, i) {
+    const a = (lines || []).slice();
+    if (i < 0 || i >= a.length) return a;
+    a.splice(i + 1, 0, Object.assign({}, a[i])); return a;
+  }
+
   // 書類番号：接頭 + 年 + 連番（その接頭・年の中で最大＋1）。例 I-2026-001
   function nextNo(docs, kind, settings = {}, now = new Date()) {
     const prefix = (settings.prefix && settings.prefix[kind]) || PREFIX[kind] || "N";
@@ -79,12 +107,24 @@
     return head + String(mx + 1).padStart(3, "0");
   }
 
-  // 期限の既定：請求書は翌月末、見積書は 30 日後
+  // 期限の既定：請求書は翌月末、見積書・発注書・注文書は 30 日後
   function defaultDue(kind, dateStr) {
     const d = parse(dateStr);
     if (kind === "請求書") { const e = new Date(d.getFullYear(), d.getMonth() + 2, 0); return toDate(e.getFullYear(), e.getMonth() + 1, e.getDate()); }
     if (kind === "見積書" || kind === "発注書" || kind === "注文書") { const e = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 30); return toDate(e.getFullYear(), e.getMonth() + 1, e.getDate()); }
     return "";
+  }
+  // 期限欄を持つ種類と、そのラベル
+  const DUE_LABEL = { "請求書": "お支払期限", "見積書": "有効期限", "発注書": "納期", "注文書": "納期" };
+  const hasDue = kind => !!DUE_LABEL[kind];
+
+  // 未入金の管理：支払期限を過ぎた未入金の請求書
+  const isOverdue = (doc, today = todayStr()) => !!doc && doc.kind === "請求書" && !doc.paid && !!doc.due && doc.due < today;
+  // 入金済みの切り替え：入金日 paidAt を持つ（CSV の「入金日」）
+  function setPaid(doc, paid, today = todayStr()) {
+    doc.paid = !!paid;
+    if (paid) doc.paidAt = doc.paidAt || today; else delete doc.paidAt;
+    return doc;
   }
 
   const isRegNo = s => REG_RE.test(String(s || "").replace(/[Ｔｔ]/g, "T").replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0)).replace(/[\s-]/g, ""));
@@ -93,11 +133,13 @@
   // 見積書 → 納品書 → 請求書 → 領収書 の引き継ぎ。品目・取引先・件名を持って、番号と日付と期限を新しくする
   function convert(doc, kind, docs, settings, now = new Date(), newId) {
     const date = toDate(now.getFullYear(), now.getMonth() + 1, now.getDate());
-    return Object.assign({}, doc, {
+    const n = Object.assign({}, doc, {
       id: newId || (Date.now().toString(36) + Math.random().toString(36).slice(2, 6)),
       kind, no: nextNo(docs, kind, settings, now), date, due: defaultDue(kind, date),
       from: doc.no, paid: false, updated: now.toISOString(), lines: (doc.lines || []).map(l => Object.assign({}, l)),
     });
+    delete n.paidAt;
+    return n;
   }
 
   // 無料の枚数：保存した書類の累計（settings.created）が FREE_DOCS 未満なら新しく作れる
@@ -129,22 +171,25 @@
   const purgeTrash = (trash, now = new Date()) => (trash || []).filter(t => t && t.deletedAt && (now - new Date(t.deletedAt)) / 864e5 <= TRASH_DAYS);
   const trashDaysLeft = (t, now = new Date()) => Math.max(0, TRASH_DAYS - Math.floor((now - new Date(t.deletedAt)) / 864e5));
 
-  // 一覧の検索：取引先・件名・番号・備考・品目名
+  // 一覧の検索：取引先・件名・番号・備考・品目名・担当者
   function matchDoc(doc, q) {
     const s = String(q || "").trim(); if (!s) return true;
-    const hay = [doc.to, doc.subject, doc.no, doc.memo, ...(doc.lines || []).map(l => l.item)].map(x => String(x || "")).join("\n");
+    const hay = [doc.to, doc.toPerson, doc.toDept, doc.subject, doc.no, doc.memo, ...(doc.lines || []).map(l => l.item)].map(x => String(x || "")).join("\n");
     return hay.includes(s);
   }
 
-  // 売上一覧の CSV（確定申告の売上帳向け。年で絞る。Excel 用に BOM 付き）
-  function salesCsv(docs, year, opt = {}) {
+  // 書類ごとの計算条件（内税は書類が持つ）
+  const docCalcOpt = (doc, opt) => Object.assign({}, opt, { withholding: !!(doc && doc.wh), inclusive: !!(doc && doc.inclusive) });
+
+  // 売上一覧の CSV（確定申告の売上帳向け。年で絞る。Excel 用に BOM 付き）。kinds：数える種類（既定は請求書・領収書）
+  function salesCsv(docs, year, opt = {}, kinds = SALES_KINDS) {
     const q = v => '"' + String(v ?? "").replace(/"/g, '""') + '"';
-    const head = ["日付", "種類", "番号", "取引先", "件名", "税抜", "消費税", "源泉徴収", "税込", "差引", "入金"];
-    const rows = (docs || []).filter(d => String(d.date || "").startsWith(String(year))).sort((a, b) => (a.date + a.no).localeCompare(b.date + b.no)).map(d => {
-      const c = calc(d.lines, Object.assign({}, opt, { withholding: !!d.wh }));
-      return [d.date, d.kind, d.no, d.to, d.subject, c.base, c.tax, c.wh, c.total, c.net, d.kind === "請求書" ? (d.paid ? "済" : "未") : ""].map(q).join(",");
+    const head = ["日付", "種類", "番号", "取引先", "件名", "税抜", "消費税", "源泉徴収", "税込", "差引", "入金", "入金日"];
+    const rows = (docs || []).filter(d => String(d.date || "").startsWith(String(year)) && (!kinds || kinds.includes(d.kind))).sort((a, b) => (a.date + a.no).localeCompare(b.date + b.no)).map(d => {
+      const c = calc(d.lines, docCalcOpt(d, opt));
+      return [d.date, d.kind, d.no, d.to, d.subject, c.base, c.tax, c.wh, c.total, c.net, d.kind === "請求書" ? (d.paid ? "済" : "未") : "", d.kind === "請求書" && d.paid ? (d.paidAt || "") : ""].map(q).join(",");
     });
-    return "\ufeff" + [head.map(q).join(","), ...rows].join("\r\n") + "\r\n";
+    return "﻿" + [head.map(q).join(","), ...rows].join("\r\n") + "\r\n";
   }
 
   // 復元の「追加」：同じ番号・同じ種類の書類は重ねない
@@ -180,17 +225,37 @@
   const sealCenterDefault = name => /株式会社/.test(name || "") ? "代表取締役印" : /合同会社/.test(name || "") ? "代表社員之印" : /一般社団法人|一般財団法人|NPO法人|特定非営利活動法人/.test(name || "") ? "理事長印" : "代表者印";
   const sealPreset = id => SEAL_PRESETS.find(p => p[0] === id) || SEAL_PRESETS[0];
 
-  // 一覧：月ごとにまとめる（新しい月が先）。請求書は差引額、それ以外は税込
-  function groupByMonth(docs, opt) {
+  // 軽減税率の印（※）を付ける税率か。settings.reduced（既定 [8]）
+  const isReduced = (rate, reduced) => (Array.isArray(reduced) ? reduced : DEFAULT_REDUCED).map(Number).includes(Number(rate));
+
+  // 一覧：月ごとにまとめる（新しい月が先）。合計は kinds（既定：請求書は差引額＋領収書）だけを数える。種類で絞っているときはその種類
+  function groupByMonth(docs, opt, kinds = SALES_KINDS) {
     const m = new Map();
     (docs || []).slice().sort((a, b) => (b.date + b.no).localeCompare(a.date + a.no)).forEach(d => {
       const k = String(d.date || "").slice(0, 7) || "日付なし";
       if (!m.has(k)) m.set(k, { month: k, docs: [], total: 0 });
-      const g = m.get(k); g.docs.push(d); g.total += shownAmount(d, calc(d.lines, Object.assign({}, opt, { withholding: d.wh })));
+      const g = m.get(k); g.docs.push(d);
+      if (!kinds || kinds.includes(d.kind)) g.total += shownAmount(d, calc(d.lines, docCalcOpt(d, opt)));
     });
     return [...m.values()];
   }
+  const monthTotalLabel = kindFilter => kindFilter ? `${kindFilter} 合計` : "請求・領収 合計";
 
+  // 取引先：data.clients（名前・敬称・郵便番号・住所・部署・担当者）。入力中の文字で絞り込む（空なら直近 6、文字があれば一致 8）
+  function clientSuggest(clients, q, recentLimit = 6, matchLimit = 8) {
+    const list = (clients || []).filter(c => c && c.name).slice().sort((a, b) => String(b.last || "").localeCompare(String(a.last || "")));
+    const s = String(q || "").trim();
+    if (!s) return list.slice(0, recentLimit);
+    return list.filter(c => c.name !== s && [c.name, c.person, c.dept].some(x => String(x || "").includes(s))).slice(0, matchLimit);
+  }
+  // 書類の取引先欄から取引先の記録を作る（既存の記録に上書き）
+  function clientFromDoc(doc, now = new Date()) {
+    return { name: String(doc.to || "").trim(), honor: doc.honor || "御中", zip: doc.toZip || "", addr: doc.toAddr || "", dept: doc.toDept || "", person: doc.toPerson || "", last: typeof now === "string" ? now : now.toISOString() };
+  }
+  // 取引先の記録を書類に写す
+  function applyClient(doc, c) {
+    return Object.assign(doc, { to: c.name, honor: c.honor || "御中", toZip: c.zip || "", toAddr: c.addr || "", toDept: c.dept || "", toPerson: c.person || "" });
+  }
   // 取引先・品目の履歴（新しい順、重複なし）
   function recentClients(docs, limit = 6) {
     const seen = new Map();
@@ -200,7 +265,7 @@
   function recentItems(docs, limit = 8) {
     const seen = new Map();
     (docs || []).slice().sort((a, b) => (b.updated || "").localeCompare(a.updated || "")).forEach(d => (d.lines || []).forEach(l => {
-      const k = String(l.item || "").trim(); if (k && !seen.has(k) && lineAmount(l) >= 0) seen.set(k, { item: k, unit: l.unit || "", price: Number(l.price) || 0, rate: l.rate });
+      const k = String(l.item || "").trim(); if (k && !seen.has(k) && !l.discount && lineAmount(l) >= 0) seen.set(k, { item: k, unit: l.unit || "", price: Number(l.price) || 0, rate: l.rate });
     }));
     return [...seen.values()].slice(0, limit);
   }
@@ -216,6 +281,9 @@
     return days > 30 ? `最後のバックアップから ${days} 日たっています。設定から書き出しておくと安心です。` : "";
   }
 
+  // 発行者（自分）の情報が未設定か（初回の導線）
+  const meMissing = me => !me || !String(me.name || "").trim();
+
   // 書類の中身の確認（PDF にする前）
   function validate(doc, me) {
     const bad = [];
@@ -225,6 +293,6 @@
     return bad;
   }
 
-  const api = { KINDS, PREFIX, FREE_DOCS, TRASH_DAYS, isSubtotal, subtotals, purgeTrash, trashDaysLeft, matchDoc, salesCsv, COLORS, WH_LIMIT, roundBy, lineAmount, calc, shownAmount, nextNo, defaultDue, isRegNo, normalizeRegNo, convert, canCreate, freeLeft, reviewUnlocked, applyReviewCode, isPro, backup, restore, mergeDocs, sealLines, sealSquareText, SEAL_FONTS, SEAL_PRESETS, sealPreset, sealCenterDefault, groupByMonth, recentClients, recentItems, shouldAskReview, backupWarning, validate, fmtDate, yen };
+  const api = { KINDS, PREFIX, FREE_DOCS, TRASH_DAYS, SALES_KINDS, DEFAULT_REDUCED, DUE_LABEL, hasDue, isSubtotal, subtotals, moveLine, duplicateLine, purgeTrash, trashDaysLeft, matchDoc, salesCsv, COLORS, WH_LIMIT, roundBy, hasPrice, lineAmount, calc, docCalcOpt, shownAmount, nextNo, defaultDue, isOverdue, setPaid, isRegNo, normalizeRegNo, convert, canCreate, freeLeft, reviewUnlocked, applyReviewCode, isPro, backup, restore, mergeDocs, sealLines, sealSquareText, SEAL_FONTS, SEAL_PRESETS, sealPreset, sealCenterDefault, isReduced, groupByMonth, monthTotalLabel, clientSuggest, clientFromDoc, applyClient, recentClients, recentItems, shouldAskReview, backupWarning, meMissing, validate, fmtDate, yen, todayStr };
   if (typeof module !== "undefined" && module.exports) module.exports = api; else root.SeikyushoCore = api;
 })(typeof window !== "undefined" ? window : globalThis);

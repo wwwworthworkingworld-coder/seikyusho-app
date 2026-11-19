@@ -15,9 +15,9 @@ CHROME = r"C:\Program Files\Google\Chrome\Application\chrome.exe"
 BOLD = r"C:\Windows\Fonts\meiryob.ttc"
 TOP, BOTTOM = (63, 81, 181), (38, 48, 120)
 SHOTS = [
-    ("1_preview", "?seed=1&shot=1&open=preview", ["iPhoneだけで", "請求書をPDFに"], "見積書・納品書・請求書・領収書。インボイス・源泉徴収も"),
-    ("2_edit", "?seed=1&shot=1&open=1", ["3タップで1枚", "取引先と品目はタップで"], "入力のたびに自動保存。会員登録も通信もなし"),
-    ("3_list", "?seed=1&shot=1", ["データは消えない", "バックアップで安心"], "ファイルに書き出して機種変更でも安心。未入金も一目で"),
+    ("1_preview", "?seed=1&shot=1&open=preview", ["スマホだけで", "請求書をPDFに"], "見積書・納品書・請求書・領収書。内税・インボイス・源泉徴収も"),
+    ("2_edit", "?seed=1&shot=1&open=1", ["3タップで1枚", "取引先と品目はタップで"], "住所・担当者も宛名に。入力のたびに自動保存"),
+    ("3_list", "?seed=1&shot=1", ["データは消えない", "未入金も一目で"], "バックアップで機種変更でも安心。期限超過は赤で"),
     ("4_settings", "?seed=1&shot=1&to=colorChips#settings", ["印影・ロゴ・色テンプレ", "買い切り2,500円"], "印影 6 種とロゴを自動で。サブスクではありません"),
 ]
 

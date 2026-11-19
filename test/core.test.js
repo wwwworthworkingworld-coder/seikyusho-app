@@ -142,7 +142,7 @@ t("印影のプリセット 6 種：角印は四角と之印、回し文字は t
   assert.strictEqual(P.sealSvg({ type: "text", text: "", preset: "kaku-classic" }), "");
   const a = sv("maru-lines"), b = sv("maru-lines"); assert.notStrictEqual(a.match(/id="(s\w+)/)?.[1], b.match(/id="(s\w+)/)?.[1] || "x");
 });
-t("月ごとの一覧：新しい月が先、請求書は差引額で合計", () => {
+t("月ごとの一覧：新しい月が先、請求書は差引額で合計、見積書は数えない", () => {
   const docs = [
     { id: "1", kind: "請求書", no: "I-2026-001", date: "2026-10-05", wh: true, lines: [L("a", 1, 100000)] },
     { id: "2", kind: "見積書", no: "Q-2026-001", date: "2026-11-02", wh: false, lines: [L("b", 1, 50000)] },
@@ -150,7 +150,7 @@ t("月ごとの一覧：新しい月が先、請求書は差引額で合計", ()
   ];
   const g = C.groupByMonth(docs, { taxable: true, rounding: "floor" });
   assert.deepStrictEqual(g.map(x => x.month), ["2026-11", "2026-10"]);
-  assert.strictEqual(g[0].total, 55000 + 11000); assert.strictEqual(g[1].total, 110000 - 10210);
+  assert.strictEqual(g[0].total, 11000); assert.strictEqual(g[1].total, 110000 - 10210);
   assert.deepStrictEqual(g[0].docs.map(d => d.id), ["3", "2"]);
 });
 t("取引先・品目の履歴は新しい順で重複なし、値引きは品目に出さない", () => {
@@ -263,11 +263,12 @@ t("売上一覧の CSV：年で絞り、BOM 付き、列は日付〜入金、税
     { kind: "見積書", no: "Q-2026-001", date: "2026-04-01", to: "サンプル工房", subject: "B", wh: false, lines: [L("b", 1, 50000)] },
     { kind: "請求書", no: "I-2025-009", date: "2025-12-01", to: "去年", subject: "", wh: false, lines: [L("c", 1, 1000)] },
   ];
-  const csv = C.salesCsv(docs, 2026, { taxable: true, rounding: "floor" });
-  assert.ok(csv.startsWith("﻿\"日付\",\"種類\",\"番号\",\"取引先\",\"件名\",\"税抜\",\"消費税\",\"源泉徴収\",\"税込\",\"差引\",\"入金\""));
+  const csv = C.salesCsv(docs, 2026, { taxable: true, rounding: "floor" }, null);   // 全部
+  assert.ok(csv.startsWith("﻿\"日付\",\"種類\",\"番号\",\"取引先\",\"件名\",\"税抜\",\"消費税\",\"源泉徴収\",\"税込\",\"差引\",\"入金\",\"入金日\""));
   const lines = csv.trim().split("\r\n"); assert.strictEqual(lines.length, 3);
-  assert.strictEqual(lines[1], '"2026-03-10","請求書","I-2026-001","見本商事","A","100000","10000","10210","110000","99790","済"');
-  assert.ok(lines[2].includes('"見積書"') && lines[2].endsWith('""') && !csv.includes("去年"));
+  assert.strictEqual(lines[1], '"2026-03-10","請求書","I-2026-001","見本商事","A","100000","10000","10210","110000","99790","済",""');
+  assert.ok(lines[2].includes('"見積書"') && lines[2].endsWith('"",""') && !csv.includes("去年"));
+  assert.strictEqual(C.salesCsv(docs, 2026, {}).trim().split("\r\n").length, 2);   // 既定は請求書・領収書だけ
 });
 t("空欄の項目は書類に印刷しない（電話・メール・住所・登録番号が空ならその行が出ない）", () => {
   const h = P.paperHtml(DOC, { name: "サンプル工房", taxable: true }, {});
@@ -310,6 +311,145 @@ t("ロゴ：全 10 型 × 8 色 × 3 書体 × 屋号 4 種（2 字・12 字・�
   const texts = (sv.match(/<text [^>]*>[^<]*<\/text>/g) || []).map(t2 => Lg.logoBounds(`<svg>${t2}</svg>`));
   assert.ok(texts[0].x1 <= 107 && texts[1].x0 >= 109, JSON.stringify(texts));
 });
+// ---- ビルド 5（08 の 4-1 A・C・D・E・J・M・F）
+t("A 値引き行：正の数で入れて discount:true なら負。古いデータの負の単価もそのまま負。小計・履歴も符号を見る", () => {
+  const d = { item: "早期割引", qty: 1, price: 5000, discount: true, rate: 10 };
+  assert.strictEqual(C.lineAmount(d), -5000);
+  assert.strictEqual(C.lineAmount({ item: "旧", qty: 1, price: -3000, rate: 10 }), -3000);
+  assert.strictEqual(C.lineAmount({ item: "負で入った値引き", qty: 1, price: -2000, discount: true, rate: 10 }), -2000);
+  const c = C.calc([L("制作", 1, 30000), d], { rounding: "floor" });
+  assert.strictEqual(c.base, 25000); assert.strictEqual(c.tax, 2500); assert.strictEqual(c.total, 27500);
+  assert.deepStrictEqual(C.subtotals([L("a", 1, 10000), d, { type: "subtotal" }]).map(s => s.amount), [5000]);
+  const items = C.recentItems([{ updated: "2026-01-01", lines: [L("制作", 1, 1000), d] }]);
+  assert.deepStrictEqual(items.map(i => i.item), ["制作"]);
+  // 画面と PDF は赤と「−」
+  const html = P.paperHtml({ kind: "請求書", lines: [L("制作", 1, 30000), d] }, {});
+  assert.ok(/<tr class="neg">.*早期割引.*−5,000.*−5,000/.test(html));
+});
+t("C 見出し行：数量・単価が空の行は PDF の数量・単価・金額が空欄（「0」を印字しない）。合計に入れない", () => {
+  const lines = [{ item: "【第 1 期】", qty: "", unit: "", price: "", rate: 10 }, L("設計", 1, 100000)];
+  const html = P.paperHtml({ kind: "請求書", lines }, {});
+  const row = html.match(/<tr class="head">.*?<\/tr>/)[0];
+  assert.ok(row.includes("【第 1 期】"));
+  assert.ok(!/>0</.test(row), row);
+  assert.strictEqual((row.match(/<td class="n"><\/td>/g) || []).length, 3);
+  assert.strictEqual(C.calc(lines).base, 100000);
+  // 単価だけ空（数量あり）でも金額は空欄
+  const html2 = P.paperHtml({ kind: "請求書", lines: [{ item: "持ち込み", qty: 2, unit: "個", price: "", rate: 10 }] }, {});
+  assert.ok(/<td class="n">2<\/td><td class="c">個<\/td><td class="n"><\/td><td class="n"><\/td>/.test(html2));
+});
+t("D 月合計：請求書（差引）＋領収書だけ。種類で絞ればその種類。CSV は請求書・領収書だけ／全部", () => {
+  const docs = [
+    { kind: "見積書", no: "Q-1", date: "2026-05-01", lines: [L("a", 1, 10000)] },
+    { kind: "請求書", no: "I-1", date: "2026-05-02", wh: true, lines: [L("a", 1, 10000)], paid: true, paidAt: "2026-05-20" },
+    { kind: "領収書", no: "R-1", date: "2026-05-03", lines: [L("b", 1, 5000)] },
+    { kind: "納品書", no: "D-1", date: "2026-05-04", lines: [L("c", 1, 99999)] },
+  ];
+  const g = C.groupByMonth(docs, { rounding: "floor" });
+  assert.strictEqual(g.length, 1); assert.strictEqual(g[0].docs.length, 4);
+  assert.strictEqual(g[0].total, (11000 - 1021) + 5500);
+  assert.strictEqual(C.groupByMonth(docs, {}, ["見積書"])[0].total, 11000);
+  assert.strictEqual(C.monthTotalLabel(""), "請求・領収 合計"); assert.strictEqual(C.monthTotalLabel("見積書"), "見積書 合計");
+  const csv = C.salesCsv(docs, 2026, {});
+  assert.strictEqual(csv.trim().split("\r\n").length, 3);
+  assert.ok(csv.includes('"入金日"') && csv.includes('"済","2026-05-20"'));
+  assert.strictEqual(C.salesCsv(docs, 2026, {}, null).trim().split("\r\n").length, 5);
+});
+t("E 内税：税率ごとに税込合計×r÷(100+r) を 1 回だけ端数処理、税抜＝税込−税（10/8 混在）", () => {
+  const c = C.calc([L("a", 1, 11000, 10), L("b", 1, 1080, 8), L("c", 2, 1000, 10)], { inclusive: true, rounding: "floor" });
+  // 10%: 13000 → 税 1181（13000×10/110=1181.8 切り捨て）税抜 11819。8%: 1080 → 税 80 税抜 1000
+  assert.deepStrictEqual(c.byRate.map(g => [g.rate, g.gross, g.tax, g.base]), [[10, 13000, 1181, 11819], [8, 1080, 80, 1000]]);
+  assert.strictEqual(c.total, 14080); assert.strictEqual(c.tax, 1261); assert.strictEqual(c.base, 12819); assert.strictEqual(c.inclusive, true);
+});
+t("E 内税：端数 3 方式", () => {
+  const ls = [L("a", 1, 1005, 10)];   // 1005×10/110 = 91.36
+  assert.strictEqual(C.calc(ls, { inclusive: true, rounding: "floor" }).tax, 91);
+  assert.strictEqual(C.calc(ls, { inclusive: true, rounding: "round" }).tax, 91);
+  assert.strictEqual(C.calc(ls, { inclusive: true, rounding: "ceil" }).tax, 92);
+  assert.strictEqual(C.calc([L("b", 1, 1100, 10)], { inclusive: true, rounding: "ceil" }).tax, 100);
+});
+t("E 内税：値引き行は税込で引く", () => {
+  const c = C.calc([L("a", 1, 11000, 10), Object.assign(L("値引き", 1, 1100, 10), { discount: true })], { inclusive: true });
+  assert.strictEqual(c.total, 9900); assert.strictEqual(c.tax, 900); assert.strictEqual(c.base, 9000);
+});
+t("E 内税：免税事業者は税額なし（税込＝税抜）", () => {
+  const c = C.calc([L("a", 1, 11000, 10)], { inclusive: true, taxable: false });
+  assert.strictEqual(c.tax, 0); assert.strictEqual(c.base, 11000); assert.strictEqual(c.total, 11000);
+});
+t("E 内税：源泉徴収の基礎は税抜", () => {
+  const c = C.calc([L("原稿料", 1, 110000, 10)], { inclusive: true, withholding: true });
+  assert.strictEqual(c.base, 100000); assert.strictEqual(c.wh, 10210); assert.strictEqual(c.net, 110000 - 10210);
+});
+t("E 内税：PDF の見出しは「単価（税込）」「金額（税込）」、内訳は「10%対象（税込）」。外税のときは出ない", () => {
+  const h1 = P.paperHtml({ kind: "請求書", inclusive: true, lines: [L("a", 1, 11000, 10)] }, {});
+  assert.ok(h1.includes("<th>単価（税込）</th><th>金額（税込）</th>") && h1.includes("10%対象（税込） 11,000円　内消費税 1,000円"));
+  const h2 = P.paperHtml({ kind: "請求書", lines: [L("a", 1, 10000, 10)] }, {});
+  assert.ok(h2.includes("<th>単価</th><th>金額</th>") && h2.includes("10%対象 10,000円　消費税 1,000円"));
+  // 免税なら内税スイッチが入っていても税の見出しは出ない
+  const h3 = P.paperHtml({ kind: "請求書", inclusive: true, lines: [L("a", 1, 11000, 10)] }, { taxable: false });
+  assert.ok(h3.includes("<th>単価</th>") && h3.includes("免税事業者"));
+});
+t("J 未入金：期限を過ぎた未入金の請求書だけ期限超過。入金済みにすると paidAt、戻すと消える", () => {
+  const d = { kind: "請求書", due: "2026-05-31", paid: false };
+  assert.strictEqual(C.isOverdue(d, "2026-06-01"), true); assert.strictEqual(C.isOverdue(d, "2026-05-31"), false);
+  assert.strictEqual(C.isOverdue(Object.assign({}, d, { paid: true }), "2026-06-01"), false);
+  assert.strictEqual(C.isOverdue({ kind: "見積書", due: "2026-05-31" }, "2026-06-01"), false);
+  C.setPaid(d, true, "2026-06-03"); assert.strictEqual(d.paid, true); assert.strictEqual(d.paidAt, "2026-06-03");
+  C.setPaid(d, false); assert.strictEqual(d.paid, false); assert.strictEqual(d.paidAt, undefined);
+  // 引き継ぎ・複製で入金日を持ち越さない
+  const n = C.convert({ kind: "請求書", no: "I-2026-001", date: "2026-05-01", paid: true, paidAt: "2026-05-20", lines: [] }, "領収書", [], settings(), NOW, "x");
+  assert.strictEqual(n.paid, false); assert.strictEqual(n.paidAt, undefined);
+});
+t("M 軽減税率の印は率ごとの設定：既定は 8%。5% をオンにすれば 5% に※、8% を外せば消える", () => {
+  const lines = [L("食品", 1, 1000, 8), L("雑貨", 1, 1000, 10), L("新税率", 1, 1000, 5)];
+  const h1 = P.paperHtml({ kind: "請求書", lines }, {}, {});
+  assert.ok(h1.includes('<td class="c">※1</td>') && h1.includes('<td class="c">2</td>') && h1.includes('<td class="c">3</td>') && h1.includes("※は軽減税率対象"));
+  const h2 = P.paperHtml({ kind: "請求書", lines }, {}, { reduced: [5] });
+  assert.ok(h2.includes('<td class="c">1</td>') && h2.includes('<td class="c">※3</td>'));
+  const h3 = P.paperHtml({ kind: "請求書", lines: [L("雑貨", 1, 1000, 10)] }, {}, { reduced: [] });
+  assert.ok(!h3.includes("※"));
+  assert.strictEqual(C.isReduced(8, undefined), true); assert.strictEqual(C.isReduced("8", [8]), true); assert.strictEqual(C.isReduced(10, [8]), false);
+});
+t("F 取引先：絞り込み（空なら直近 6、文字があれば一致 8）。書類に住所・部署・担当者を写し、PDF に出る", () => {
+  const clients = Array.from({ length: 12 }, (_, i) => ({ name: `見本${i}商事`, honor: "御中", last: `2026-01-${String(i + 1).padStart(2, "0")}` }));
+  clients.push({ name: "サンプル工房", honor: "様", person: "見本 花子", last: "2026-02-01" });
+  assert.strictEqual(C.clientSuggest(clients, "").length, 6); assert.strictEqual(C.clientSuggest(clients, "")[0].name, "サンプル工房");
+  assert.strictEqual(C.clientSuggest(clients, "見本").length, 8);
+  assert.deepStrictEqual(C.clientSuggest(clients, "花子").map(c => c.name), ["サンプル工房"]);
+  assert.strictEqual(C.clientSuggest(clients, "サンプル工房").length, 0);   // 全部入力済みなら出さない
+  const doc = C.applyClient({ kind: "請求書", lines: [] }, { name: "見本商事", honor: "御中", zip: "000-0000", addr: "東京都見本区 1-2-3", dept: "総務部", person: "見本 花子" });
+  const html = P.paperHtml(doc, { name: "サンプル工房", person: "見本 太郎", tel: "03-0000-0000", fax: "03-0000-0001" });
+  assert.ok(html.includes('<div class="to-addr">〒000-0000　東京都見本区 1-2-3</div>'));
+  assert.ok(html.includes('<div class="to-person">総務部　見本 花子 様</div>'));
+  assert.ok(html.includes("担当：見本 太郎") && html.includes("TEL 03-0000-0000　FAX 03-0000-0001"));
+  const rec = C.clientFromDoc(doc, "2026-03-01T00:00:00.000Z");
+  assert.deepStrictEqual(rec, { name: "見本商事", honor: "御中", zip: "000-0000", addr: "東京都見本区 1-2-3", dept: "総務部", person: "見本 花子", last: "2026-03-01T00:00:00.000Z" });
+  assert.ok(C.matchDoc(doc, "花子"));
+});
+t("H 文言：挨拶文・振込手数料の一文を変えられる。空にすれば出ない。既定は今の文", () => {
+  const doc = { kind: "請求書", lines: [L("a", 1, 1000)], due: "2026-06-30" };
+  const h0 = P.paperHtml(doc, {});
+  assert.ok(h0.includes("下記のとおりご請求申し上げます。") && h0.includes("振込手数料はご負担をお願いいたします。"));
+  const h1 = P.paperHtml(doc, {}, { text: { greet: { "請求書": "ご請求です。" }, feeNote: "" } });
+  assert.ok(h1.includes("ご請求です。") && !h1.includes("振込手数料") && !h1.includes("下記のとおりご請求"));
+  const h2 = P.paperHtml(doc, {}, { text: { greet: { "請求書": "" } } });
+  assert.ok(!h2.includes("下記のとおりご請求") && h2.includes("振込手数料"));
+});
+t("I 行の並べ替え・複製", () => {
+  const ls = [L("a", 1, 1), L("b", 1, 2), L("c", 1, 3)];
+  assert.deepStrictEqual(C.moveLine(ls, 0, 1).map(l => l.item), ["b", "a", "c"]);
+  assert.deepStrictEqual(C.moveLine(ls, 0, -1).map(l => l.item), ["a", "b", "c"]);
+  assert.deepStrictEqual(C.moveLine(ls, 2, 1).map(l => l.item), ["a", "b", "c"]);
+  const d = C.duplicateLine(ls, 1); assert.deepStrictEqual(d.map(l => l.item), ["a", "b", "b", "c"]); assert.notStrictEqual(d[1], d[2]);
+});
+t("B 期限欄：請求書・見積書・発注書・注文書に出て、発注書・注文書は「納期」。納品書・領収書は出ない", () => {
+  assert.strictEqual(C.DUE_LABEL["発注書"], "納期"); assert.strictEqual(C.DUE_LABEL["注文書"], "納期"); assert.strictEqual(C.DUE_LABEL["見積書"], "有効期限");
+  assert.ok(C.hasDue("請求書") && C.hasDue("発注書") && !C.hasDue("納品書") && !C.hasDue("領収書"));
+});
+t("K 初回の導線：屋号が空なら未設定", () => {
+  assert.strictEqual(C.meMissing({ name: "" }), true); assert.strictEqual(C.meMissing({ name: "  " }), true); assert.strictEqual(C.meMissing({ name: "サンプル工房" }), false); assert.strictEqual(C.meMissing(null), true);
+});
+
 t("審査用コード：ネイティブの照合が一致したら Android だけ解除。iOS・web では一致しても無効、購入フラグとは別", () => {
   const s1 = settings();
   assert.strictEqual(C.applyReviewCode(s1, "android", true), true); assert.strictEqual(s1.reviewUnlocked, true);
