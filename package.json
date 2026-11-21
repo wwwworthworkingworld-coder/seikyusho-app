@@ -14,7 +14,6 @@
     "@capacitor/preferences": "8.0.1",
     "@capacitor/share": "8.0.3",
     "seikyusho-pdf": "file:plugins/seikyusho-pdf",
-    "seikyusho-review": "file:plugins/seikyusho-review",
     "seikyusho-store": "file:plugins/seikyusho-store"
   },
   "devDependencies": {

@@ -2,91 +2,99 @@ import Foundation
 import Capacitor
 import StoreKit
 
-/// アプリ内課金（買い切り・非消耗型）。StoreKit 2 だけを使い、サーバーも外部サービスも使わない。
-/// 購入の有無は Apple の Transaction.currentEntitlements で確かめる（端末を変えても同じ Apple アカウントなら復元できる）
+/// 請求書ラクラクの買い切り（1 商品固定）。StoreKit 2 の Product / Transaction だけを使い、サーバーは無い。
+/// JS からは 4 つ：status（持っているか）・loadOffer（価格の表示文）・buy（購入画面）・recover（別の端末での購入を引き当てる）
 @objc(SeikyushoStorePlugin)
 public class SeikyushoStorePlugin: CAPPlugin, CAPBridgedPlugin {
     public let identifier = "SeikyushoStorePlugin"
     public let jsName = "SeikyushoStore"
     public let pluginMethods: [CAPPluginMethod] = [
-        CAPPluginMethod(name: "getProduct", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "purchase", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "restore", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "isPurchased", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "status", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "loadOffer", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "buy", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "recover", returnType: CAPPluginReturnPromise)
     ]
-    private var updates: Task<Void, Never>?
+
+    /// 商品は 1 つだけ（無制限・印影・テンプレ）。App Store Connect の製品 ID
+    private static let offerId = "com.company256.seikyusho.pro"
+    private var watcher: Task<Void, Never>?
+    private var cachedOffer: Product?
 
     public override func load() {
-        // アプリの外で完了した取引（承認待ちが承認された等）を受け取って finish する
-        updates = Task.detached { [weak self] in
-            for await result in Transaction.updates {
-                if case .verified(let t) = result {
-                    await t.finish()
-                    self?.notifyListeners("purchaseUpdated", data: ["productId": t.productID])
-                }
+        // 承認待ち（Ask to Buy など）がアプリの外で確定したときに受け取り、finish して JS に知らせる
+        watcher = Task.detached { [weak self] in
+            for await outcome in Transaction.updates {
+                guard case .verified(let tx) = outcome else { continue }
+                await tx.finish()
+                self?.notifyListeners("offerUnlocked", data: ["offer": tx.productID])
             }
         }
     }
 
-    deinit { updates?.cancel() }
+    deinit { watcher?.cancel() }
 
-    private func owns(_ productId: String) async -> Bool {
-        for await result in Transaction.currentEntitlements {
-            if case .verified(let t) = result, t.productID == productId, t.revocationDate == nil {
-                return true
-            }
+    // ---- 内部
+
+    private func fetchOffer() async throws -> Product? {
+        if let p = cachedOffer { return p }
+        let p = try await Product.products(for: [Self.offerId]).first
+        cachedOffer = p
+        return p
+    }
+
+    private func entitled() async -> Bool {
+        for await outcome in Transaction.currentEntitlements {
+            guard case .verified(let tx) = outcome else { continue }
+            if tx.productID == Self.offerId && tx.revocationDate == nil { return true }
         }
         return false
     }
 
-    @objc func isPurchased(_ call: CAPPluginCall) {
-        let id = call.getString("productId") ?? ""
-        Task {
-            let ok = await owns(id)
-            call.resolve(["purchased": ok])
-        }
+    private func reply(_ call: CAPPluginCall, unlocked: Bool) {
+        call.resolve(["unlocked": unlocked, "offer": Self.offerId])
     }
 
-    @objc func getProduct(_ call: CAPPluginCall) {
-        let id = call.getString("productId") ?? ""
+    // ---- JS から
+
+    /// 持っているか（起動時）。Apple の currentEntitlements を見る
+    @objc func status(_ call: CAPPluginCall) {
+        Task { reply(call, unlocked: await entitled()) }
+    }
+
+    /// 価格の表示文（例「¥2,500」）。App Store から取れないときはエラーにせず price 無しで返す（画面は「購入する」とだけ出す）
+    @objc func loadOffer(_ call: CAPPluginCall) {
         Task {
-            do {
-                // 商品が App Store に未登録・取得できないときはエラーにせず「見つからない」を返す（画面は価格なしの文言で動く）
-                guard let p = try await Product.products(for: [id]).first else {
-                    call.resolve(["found": false])
-                    return
-                }
-                call.resolve(["found": true, "productId": p.id, "price": p.displayPrice, "name": p.displayName, "description": p.description])
-            } catch {
-                call.resolve(["found": false, "error": error.localizedDescription])
+            var out: [String: Any] = ["offer": Self.offerId]
+            if let p = try? await fetchOffer() {
+                out["price"] = p.displayPrice
+                out["title"] = p.displayName
             }
+            call.resolve(out)
         }
     }
 
-    @objc func purchase(_ call: CAPPluginCall) {
-        let id = call.getString("productId") ?? ""
+    /// 購入画面を出す。結果は done / waiting（承認待ち）/ cancelled
+    @objc func buy(_ call: CAPPluginCall) {
         Task {
             do {
-                guard let p = try await Product.products(for: [id]).first else {
-                    call.reject("商品が見つかりません")
+                guard let p = try await fetchOffer() else {
+                    call.reject("商品を読み込めませんでした")
                     return
                 }
-                let result = try await p.purchase()
-                switch result {
-                case .success(let verification):
-                    switch verification {
-                    case .verified(let t):
-                        await t.finish()
-                        call.resolve(["state": "purchased"])
-                    case .unverified:
+                switch try await p.purchase() {
+                case .success(let outcome):
+                    guard case .verified(let tx) = outcome else {
                         call.reject("購入を確認できませんでした")
+                        return
                     }
+                    await tx.finish()
+                    call.resolve(["result": "done"])
                 case .pending:
-                    call.resolve(["state": "pending"])
+                    call.resolve(["result": "waiting"])
                 case .userCancelled:
-                    call.resolve(["state": "cancelled"])
+                    call.resolve(["result": "cancelled"])
                 @unknown default:
-                    call.resolve(["state": "cancelled"])
+                    call.resolve(["result": "cancelled"])
                 }
             } catch {
                 call.reject(error.localizedDescription)
@@ -94,12 +102,11 @@ public class SeikyushoStorePlugin: CAPPlugin, CAPBridgedPlugin {
         }
     }
 
-    @objc func restore(_ call: CAPPluginCall) {
-        let id = call.getString("productId") ?? ""
+    /// 別の端末・再インストール後：App Store と同期してから持っているかを見る
+    @objc func recover(_ call: CAPPluginCall) {
         Task {
             try? await AppStore.sync()
-            let ok = await owns(id)
-            call.resolve(["purchased": ok])
+            reply(call, unlocked: await entitled())
         }
     }
 }

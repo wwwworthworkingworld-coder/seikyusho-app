@@ -26,7 +26,7 @@
     location.reload();
     return;
   }
-  window.SeikyushoStoreMock = { isPurchased: async () => ({ purchased: true }), getProduct: async () => ({ price: "¥2,500" }), purchase: async () => ({ state: "purchased" }), restore: async () => ({ purchased: true }) };
+  window.SeikyushoStoreMock = { status: async () => ({ unlocked: true }), loadOffer: async () => ({ price: "¥2,500" }), buy: async () => ({ result: "done" }), recover: async () => ({ unlocked: true }) };
   const wait = ms => new Promise(r => setTimeout(r, ms));
   // 1画面を60秒ずつ見せる。ios-screens.yml が起動の40秒後から60秒おきに撮る：1 一覧 → 2 作る → 3 プレビュー → 4 設定
   await wait(60000); document.querySelector(".doclist li").click();

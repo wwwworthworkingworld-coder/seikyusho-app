@@ -1,51 +1,54 @@
 """アプリのアイコンと起動画面を作る。py tools/make_icon.py
-インディゴの地に、白い書類と赤い丸印（請求書のしるし）。経費メモ（紺・レシート）、医療費控除メモ（緑・＋）と見分けられる"""
+深緑の地に大きな「請」1 文字（白）と、右下に小さな朱の角印。紙・線の飾りは使わない（他の 2 本と構図・図柄・配色を分ける）"""
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 
 ROOT = Path(__file__).parent.parent
 ASSETS = ROOT / "ios" / "App" / "App" / "Assets.xcassets"
-TOP, BOTTOM = (63, 81, 181), (38, 48, 120)   # インディゴ
-NAVY_BOTTOM = BOTTOM
-RED, LINE = (214, 58, 46), (205, 212, 230)
+GREEN = (27, 94, 74)          # --brand #1b5e4a
+GREEN_DEEP = (17, 66, 52)
+VERMILION = (205, 57, 44)
+FONT = r"C:\Windows\Fonts\YuGothB.ttc"
 
 
-def gradient(size):
-    img = Image.new("RGB", (size, size))
-    d = ImageDraw.Draw(img)
-    for y in range(size):
-        t = y / (size - 1)
-        d.line([(0, y), (size, y)], fill=tuple(round(a + (b - a) * t) for a, b in zip(TOP, BOTTOM)))
+def base(size, radial=True):
+    """深緑の地。中心がわずかに明るい（単調にならない程度）"""
+    img = Image.new("RGB", (size, size), GREEN_DEEP)
+    if radial:
+        d = ImageDraw.Draw(img)
+        cx, cy = size * 0.42, size * 0.38
+        steps = 60
+        for i in range(steps, 0, -1):
+            t = i / steps
+            r = size * 0.95 * t
+            col = tuple(round(b + (a - b) * (1 - t) ** 1.6) for a, b in zip(GREEN, GREEN_DEEP))
+            d.ellipse([cx - r, cy - r, cx + r, cy + r], fill=col)
     return img
 
 
-def paper(img, cx, cy, w, h):
-    """角を折った書類に、タイトルの線・明細の線・右下に赤い丸印"""
+def glyph(img, cx, cy, size):
+    """「請」1 文字（白）と右下の角印「印」"""
     d = ImageDraw.Draw(img)
-    x0, x1, y0, y1 = cx - w // 2, cx + w // 2, cy - h // 2, cy + h // 2
-    fold = w * 0.22
-    d.polygon([(x0, y0), (x1 - fold, y0), (x1, y0 + fold), (x1, y1), (x0, y1)], fill=(255, 255, 255))
-    d.polygon([(x1 - fold, y0), (x1 - fold, y0 + fold), (x1, y0 + fold)], fill=LINE)
-    # タイトルの太い線と明細の線
-    d.rounded_rectangle([x0 + w * 0.16, y0 + h * 0.18, x1 - w * 0.4, y0 + h * 0.18 + h * 0.07], radius=h * 0.03, fill=TOP)
-    for i, frac in enumerate((0.36, 0.47, 0.58)):
-        yy = y0 + h * frac
-        d.rounded_rectangle([x0 + w * 0.16, yy, x1 - w * (0.16 if i != 2 else 0.36), yy + h * 0.045], radius=h * 0.02, fill=LINE)
-    # 赤い丸印（右下）
-    r = w * 0.17
-    sx, sy = x1 - w * 0.3, y1 - h * 0.22
-    d.ellipse([sx - r, sy - r, sx + r, sy + r], outline=RED, width=max(2, int(r * 0.16)))
-    d.ellipse([sx - r * 0.55, sy - r * 0.55, sx + r * 0.55, sy + r * 0.55], fill=RED)
+    f = ImageFont.truetype(FONT, int(size * 0.64))
+    d.text((cx - size * 0.04, cy - size * 0.02), "請", font=f, fill=(255, 255, 255), anchor="mm")
+    # 角印：朱の枠に「印」。右下に小さく
+    s = size * 0.2
+    x1, y1 = cx + size * 0.42, cy + size * 0.42
+    x0, y0 = x1 - s, y1 - s
+    d.rounded_rectangle([x0, y0, x1, y1], radius=s * 0.08, fill=VERMILION)
+    d.rounded_rectangle([x0 + s * 0.09, y0 + s * 0.09, x1 - s * 0.09, y1 - s * 0.09], radius=s * 0.05, outline=(255, 255, 255), width=max(2, int(s * 0.05)))
+    f2 = ImageFont.truetype(FONT, int(s * 0.6))
+    d.text(((x0 + x1) / 2, (y0 + y1) / 2 + s * 0.02), "印", font=f2, fill=(255, 255, 255), anchor="mm")
 
 
 S = 4
-big = gradient(1024 * S)
-paper(big, 512 * S, 512 * S, 540 * S, 680 * S)
+big = base(1024 * S)
+glyph(big, 512 * S, 512 * S, 1024 * S)
 big.resize((1024, 1024), Image.LANCZOS).save(ASSETS / "AppIcon.appiconset" / "AppIcon-512@2x.png", optimize=True)
 
-splash = Image.new("RGB", (2732, 2732), BOTTOM)
-paper(splash, 1366, 1366, 270, 340)
+splash = Image.new("RGB", (2732, 2732), GREEN_DEEP)
+glyph(splash, 1366, 1366, 520)
 for name in ("splash-2732x2732.png", "splash-2732x2732-1.png", "splash-2732x2732-2.png"):
     splash.save(ASSETS / "Splash.imageset" / name, optimize=True)
 
@@ -59,13 +62,14 @@ if AND.exists():
         rnd = big.resize((px, px), Image.LANCZOS).convert("RGBA"); rnd.putalpha(r); rnd.save(AND / f"mipmap-{name}" / "ic_launcher_round.png", optimize=True)
         fpx = int(108 * dp)
         fg = Image.new("RGBA", (fpx, fpx), (0, 0, 0, 0))
-        inner = big.resize((int(fpx * 0.72), int(fpx * 0.72)), Image.LANCZOS)
-        fg.paste(inner, ((fpx - inner.width) // 2, (fpx - inner.height) // 2)); fg.save(AND / f"mipmap-{name}" / "ic_launcher_foreground.png", optimize=True)
+        inner = Image.new("RGB", (fpx, fpx), GREEN_DEEP); glyph(inner, fpx // 2, fpx // 2, int(fpx * 0.66))
+        mask = Image.new("L", (fpx, fpx), 0); ImageDraw.Draw(mask).rounded_rectangle([fpx * 0.17, fpx * 0.17, fpx * 0.83, fpx * 0.83], radius=fpx * 0.12, fill=255)
+        fg.paste(inner, (0, 0), mask); fg.save(AND / f"mipmap-{name}" / "ic_launcher_foreground.png", optimize=True)
     (AND / "values" / "ic_launcher_background.xml").write_text(
-        '<?xml version="1.0" encoding="utf-8"?>\n<resources>\n    <color name="ic_launcher_background">#%02X%02X%02X</color>\n</resources>\n' % NAVY_BOTTOM, encoding="utf-8")
+        '<?xml version="1.0" encoding="utf-8"?>\n<resources>\n    <color name="ic_launcher_background">#%02X%02X%02X</color>\n</resources>\n' % GREEN_DEEP, encoding="utf-8")
     for d in AND.glob("drawable*"):
         sp = d / "splash.png"
         if sp.exists():
             w, h = Image.open(sp).size
-            s2 = Image.new("RGB", (w, h), NAVY_BOTTOM); paper(s2, w // 2, h // 2, int(min(w, h) * 0.1), int(min(w, h) * 0.125)); s2.save(sp, optimize=True)
+            s2 = Image.new("RGB", (w, h), GREEN_DEEP); glyph(s2, w // 2, h // 2, int(min(w, h) * 0.2)); s2.save(sp, optimize=True)
 print("ok")

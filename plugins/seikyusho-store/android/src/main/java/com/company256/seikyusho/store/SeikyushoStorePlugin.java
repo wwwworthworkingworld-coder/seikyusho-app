@@ -23,14 +23,15 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * アプリ内課金（買い切り・非消耗型）。Google Play Billing だけを使い、サーバーも外部サービスも使わない。
- * iOS 版（StoreKit 2）と同じ 4 つのメソッド：getProduct / purchase / restore / isPurchased。
+ * 請求書ラクラクの買い切り（1 商品固定 seikyusho_pro）。Google Play Billing だけを使い、サーバーは無い。
+ * JS からは 4 つ：status（持っているか）・loadOffer（価格の表示文）・buy（購入画面）・recover（別の端末での購入を引き当てる）。iOS 版と同じ名前。
+ * ほかに checkReviewCode（Android 版だけの審査用コード。SHA-256 だけを持つ）。
  */
 @CapacitorPlugin(name = "SeikyushoStore")
 public class SeikyushoStorePlugin extends Plugin implements PurchasesUpdatedListener {
+    private static final String OFFER_ID = "seikyusho_pro";
     private BillingClient client;
-    private PluginCall purchaseCall;
-    private String purchasingId = "";
+    private PluginCall buyCall;
 
     private interface Ready { void run(boolean ok); }
 
@@ -44,11 +45,11 @@ public class SeikyushoStorePlugin extends Plugin implements PurchasesUpdatedList
         });
     }
 
-    private void queryOwned(final String productId, final Ready then) {
+    private void queryOwned(final Ready then) {
         client.queryPurchasesAsync(QueryPurchasesParams.newBuilder().setProductType(BillingClient.ProductType.INAPP).build(), (r, purchases) -> {
             boolean owned = false;
             for (Purchase p : purchases) {
-                if (p.getProducts().contains(productId) && p.getPurchaseState() == Purchase.PurchaseState.PURCHASED) {
+                if (p.getProducts().contains(OFFER_ID) && p.getPurchaseState() == Purchase.PurchaseState.PURCHASED) {
                     owned = true;
                     if (!p.isAcknowledged()) acknowledge(p);
                 }
@@ -61,23 +62,24 @@ public class SeikyushoStorePlugin extends Plugin implements PurchasesUpdatedList
         client.acknowledgePurchase(AcknowledgePurchaseParams.newBuilder().setPurchaseToken(p.getPurchaseToken()).build(), r -> { });
     }
 
-    private void queryProduct(final String productId, final java.util.function.Consumer<ProductDetails> then) {
+    private void queryOffer(final java.util.function.Consumer<ProductDetails> then) {
         QueryProductDetailsParams params = QueryProductDetailsParams.newBuilder().setProductList(Collections.singletonList(
-            QueryProductDetailsParams.Product.newBuilder().setProductId(productId).setProductType(BillingClient.ProductType.INAPP).build())).build();
+            QueryProductDetailsParams.Product.newBuilder().setProductId(OFFER_ID).setProductType(BillingClient.ProductType.INAPP).build())).build();
         client.queryProductDetailsAsync(params, (r, list) -> then.accept(list != null && !list.isEmpty() ? list.get(0) : null));
     }
 
+    /** 持っているか（起動時） */
     @PluginMethod
-    public void isPurchased(final PluginCall call) {
-        final String id = call.getString("productId", "");
+    public void status(final PluginCall call) {
         connect(ok -> {
-            if (!ok) { resolvePurchased(call, false); return; }
-            queryOwned(id, owned -> resolvePurchased(call, owned));
+            if (!ok) { reply(call, false); return; }
+            queryOwned(owned -> reply(call, owned));
         });
     }
 
+    /** Play は購入をアカウントに持つので、同期の手順は無く status と同じ */
     @PluginMethod
-    public void restore(final PluginCall call) { isPurchased(call); }
+    public void recover(final PluginCall call) { status(call); }
 
     // 審査用コード（Android 版だけ）。Google Play の審査員が有料部分を確かめるためのもの。
     // コードそのものは持たず SHA-256 だけを持つ。一致しても購入状態には触れない（JS 側が別のフラグで扱う）。
@@ -96,38 +98,36 @@ public class SeikyushoStorePlugin extends Plugin implements PurchasesUpdatedList
         JSObject ret = new JSObject(); ret.put("ok", ok); call.resolve(ret);
     }
 
+    /** 価格の表示文。Play から取れないときはエラーにせず price 無しで返す */
     @PluginMethod
-    public void getProduct(final PluginCall call) {
-        final String id = call.getString("productId", "");
+    public void loadOffer(final PluginCall call) {
+        final JSObject ret = new JSObject(); ret.put("offer", OFFER_ID);
         connect(ok -> {
-            if (!ok) { JSObject ret = new JSObject(); ret.put("found", false); call.resolve(ret); return; }
-            queryProduct(id, pd -> {
-                JSObject ret = new JSObject();
-                if (pd == null || pd.getOneTimePurchaseOfferDetails() == null) { ret.put("found", false); call.resolve(ret); return; }
-                ret.put("found", true);
-                ret.put("productId", pd.getProductId());
-                ret.put("price", pd.getOneTimePurchaseOfferDetails().getFormattedPrice());
-                ret.put("name", pd.getName());
-                ret.put("description", pd.getDescription());
+            if (!ok) { call.resolve(ret); return; }
+            queryOffer(pd -> {
+                if (pd != null && pd.getOneTimePurchaseOfferDetails() != null) {
+                    ret.put("price", pd.getOneTimePurchaseOfferDetails().getFormattedPrice());
+                    ret.put("title", pd.getName());
+                }
                 call.resolve(ret);
             });
         });
     }
 
+    /** 購入画面。結果は done / waiting（承認待ち）/ cancelled */
     @PluginMethod
-    public void purchase(final PluginCall call) {
-        final String id = call.getString("productId", "");
+    public void buy(final PluginCall call) {
         connect(ok -> {
             if (!ok) { call.reject("Google Play に接続できませんでした"); return; }
-            queryProduct(id, pd -> {
-                if (pd == null) { call.reject("商品が見つかりません"); return; }
-                purchaseCall = call; purchasingId = id;
+            queryOffer(pd -> {
+                if (pd == null) { call.reject("商品を読み込めませんでした"); return; }
+                buyCall = call;
                 List<BillingFlowParams.ProductDetailsParams> list = Collections.singletonList(
                     BillingFlowParams.ProductDetailsParams.newBuilder().setProductDetails(pd).build());
                 BillingFlowParams flow = BillingFlowParams.newBuilder().setProductDetailsParamsList(list).build();
                 new Handler(Looper.getMainLooper()).post(() -> {
                     BillingResult r = client.launchBillingFlow(getActivity(), flow);
-                    if (r.getResponseCode() != BillingClient.BillingResponseCode.OK) { purchaseCall = null; call.reject("購入画面を開けませんでした"); }
+                    if (r.getResponseCode() != BillingClient.BillingResponseCode.OK) { buyCall = null; call.reject("購入画面を開けませんでした"); }
                 });
             });
         });
@@ -135,26 +135,26 @@ public class SeikyushoStorePlugin extends Plugin implements PurchasesUpdatedList
 
     @Override
     public void onPurchasesUpdated(BillingResult r, List<Purchase> purchases) {
-        PluginCall call = purchaseCall; purchaseCall = null;
+        PluginCall call = buyCall; buyCall = null;
         int code = r.getResponseCode();
         if (code == BillingClient.BillingResponseCode.OK && purchases != null) {
-            String state = "cancelled";
+            String result = "cancelled";
             for (Purchase p : purchases) {
-                if (!p.getProducts().contains(purchasingId)) continue;
-                if (p.getPurchaseState() == Purchase.PurchaseState.PURCHASED) { state = "purchased"; if (!p.isAcknowledged()) acknowledge(p); }
-                else if (p.getPurchaseState() == Purchase.PurchaseState.PENDING) state = "pending";
+                if (!p.getProducts().contains(OFFER_ID)) continue;
+                if (p.getPurchaseState() == Purchase.PurchaseState.PURCHASED) { result = "done"; if (!p.isAcknowledged()) acknowledge(p); }
+                else if (p.getPurchaseState() == Purchase.PurchaseState.PENDING) result = "waiting";
             }
-            if (call != null) resolveState(call, state);
-            notifyListeners("purchaseUpdated", new JSObject().put("productId", purchasingId));
+            if (call != null) resolveResult(call, result);
+            notifyListeners("offerUnlocked", new JSObject().put("offer", OFFER_ID));
         } else if (code == BillingClient.BillingResponseCode.USER_CANCELED) {
-            if (call != null) resolveState(call, "cancelled");
+            if (call != null) resolveResult(call, "cancelled");
         } else if (code == BillingClient.BillingResponseCode.ITEM_ALREADY_OWNED) {
-            if (call != null) resolveState(call, "purchased");
+            if (call != null) resolveResult(call, "done");
         } else {
             if (call != null) call.reject("購入できませんでした（" + code + "）");
         }
     }
 
-    private void resolveState(PluginCall call, String state) { JSObject ret = new JSObject(); ret.put("state", state); call.resolve(ret); }
-    private void resolvePurchased(PluginCall call, boolean owned) { JSObject ret = new JSObject(); ret.put("purchased", owned); call.resolve(ret); }
+    private void resolveResult(PluginCall call, String result) { JSObject ret = new JSObject(); ret.put("result", result); call.resolve(ret); }
+    private void reply(PluginCall call, boolean unlocked) { JSObject ret = new JSObject(); ret.put("unlocked", unlocked); ret.put("offer", OFFER_ID); call.resolve(ret); }
 }

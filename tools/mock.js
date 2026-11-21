@@ -28,21 +28,21 @@
   // 購入の試し：?buy=0 で未購入の画面
   let bought = q.get("buy") !== "0";
   window.SeikyushoStoreMock = {
-    isPurchased: async () => ({ purchased: bought }),
-    getProduct: async () => ({ productId: "mock", price: "¥2,500", name: "無制限・印影・テンプレ" }),
-    purchase: async () => { bought = true; return { state: "purchased" }; },
-    restore: async () => ({ purchased: bought }),
+    status: async () => ({ unlocked: bought, offer: "mock" }),
+    loadOffer: async () => ({ offer: "mock", price: "¥2,500", title: "無制限・印影・テンプレ" }),
+    buy: async () => { bought = true; return { result: "done" }; },
+    recover: async () => ({ unlocked: bought, offer: "mock" }),
   };
   // 撮影用：iPhoneの上下の余白をまねる
   if (q.get("shot") !== null) {
     document.addEventListener("DOMContentLoaded", () => {
       const s = document.createElement("style");
-      s.textContent = ".bar{padding-top:62px!important}.tabs{padding-bottom:30px!important}.sm-bar{padding-top:62px!important}.sm-foot{padding-bottom:40px!important}";
+      s.textContent = ".bar{padding-top:62px!important}.fabbar,.totalbar{padding-bottom:30px!important}.sm-bar{padding-top:62px!important}.sm-foot{padding-bottom:40px!important}";
       document.head.appendChild(s);
       if (q.get("open")) setTimeout(() => { const li = document.querySelector(".doclist li"); if (li) li.click(); if (q.get("open") === "preview") setTimeout(() => document.getElementById("previewBtn").click(), 300); }, 400);
       if (q.get("pay") !== null) setTimeout(() => document.getElementById("createBtn").click(), 500);
       // 撮影用：指定の要素まで送る（例 &to=colorChips で「見た目」の所）
-      if (q.get("to")) setTimeout(() => { const el = document.getElementById(q.get("to")); if (el) document.getElementById("scroll").scrollTop = el.closest(".card").offsetTop - 8; }, 700);
+      if (q.get("to")) setTimeout(() => { const el = document.getElementById(q.get("to")); if (el) { const m = document.getElementById("scroll"); m.scrollTop = el.getBoundingClientRect().top - m.getBoundingClientRect().top + m.scrollTop - 56; } }, 700);
     });
   }
 })();

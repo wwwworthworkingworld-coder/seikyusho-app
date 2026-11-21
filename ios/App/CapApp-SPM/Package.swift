@@ -16,7 +16,6 @@ let package = Package(
         .package(name: "CapacitorPreferences", path: "../../../node_modules/@capacitor/preferences"),
         .package(name: "CapacitorShare", path: "../../../node_modules/@capacitor/share"),
         .package(name: "SeikyushoPdf", path: "../../../plugins/seikyusho-pdf"),
-        .package(name: "SeikyushoReview", path: "../../../plugins/seikyusho-review"),
         .package(name: "SeikyushoStore", path: "../../../plugins/seikyusho-store")
     ],
     targets: [
@@ -29,7 +28,6 @@ let package = Package(
                 .product(name: "CapacitorPreferences", package: "CapacitorPreferences"),
                 .product(name: "CapacitorShare", package: "CapacitorShare"),
                 .product(name: "SeikyushoPdf", package: "SeikyushoPdf"),
-                .product(name: "SeikyushoReview", package: "SeikyushoReview"),
                 .product(name: "SeikyushoStore", package: "SeikyushoStore")
             ]
         )

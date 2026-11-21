@@ -2,6 +2,7 @@ import Foundation
 import Capacitor
 import WebKit
 import UIKit
+import StoreKit
 
 /// 書類の HTML を A4（210×297mm＝595.2×841.8pt）の PDF にする。
 /// 画面に出さない WKWebView に HTML を読み込み、UIPrintPageRenderer で紙のサイズに割り付ける（幅ずれが起きない）。
@@ -11,7 +12,8 @@ public class SeikyushoPdfPlugin: CAPPlugin, CAPBridgedPlugin, WKNavigationDelega
     public let identifier = "SeikyushoPdfPlugin"
     public let jsName = "SeikyushoPdf"
     public let pluginMethods: [CAPPluginMethod] = [
-        CAPPluginMethod(name: "makePdf", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "makePdf", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "requestReview", returnType: CAPPluginReturnPromise)
     ]
     private var pdfWebView: WKWebView?
     private var pending: CAPPluginCall?
@@ -85,6 +87,19 @@ public class SeikyushoPdfPlugin: CAPPlugin, CAPBridgedPlugin, WKNavigationDelega
             finish(path: url.path, pages: pages)
         } catch {
             finish(error: error.localizedDescription)
+        }
+    }
+
+    /// PDF を作った直後などに、App Store の評価ダイアログを「出してよいか」を頼む。出すかどうか・回数の上限は Apple が決める。
+    /// こちらで誘導の文言やボタンは出さない（審査ガイドライン 1.1.7／5.6.1）
+    @objc func requestReview(_ call: CAPPluginCall) {
+        DispatchQueue.main.async {
+            guard let scene = UIApplication.shared.connectedScenes.first(where: { $0.activationState == .foregroundActive }) as? UIWindowScene else {
+                call.resolve(["asked": false])
+                return
+            }
+            if #available(iOS 16.0, *) { AppStore.requestReview(in: scene) } else { SKStoreReviewController.requestReview(in: scene) }
+            call.resolve(["asked": true])
         }
     }
 

@@ -15,6 +15,9 @@ import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
+import com.google.android.play.core.review.ReviewInfo;
+import com.google.android.play.core.review.ReviewManager;
+import com.google.android.play.core.review.ReviewManagerFactory;
 
 import java.io.File;
 
@@ -99,4 +102,19 @@ public class SeikyushoPdfPlugin extends Plugin {
         ret.put("pages", pages);
         call.resolve(ret);
     }
+
+    /** Google Play の In-App Review を「出してよいか」頼む。出すかどうかは Google が決める（文言・回数はこちらで足さない） */
+    @PluginMethod
+    public void requestReview(final PluginCall call) {
+        try {
+            final ReviewManager manager = ReviewManagerFactory.create(getContext());
+            manager.requestReviewFlow().addOnCompleteListener(task -> {
+                if (!task.isSuccessful() || getActivity() == null) { replyReview(call, false); return; }
+                ReviewInfo info = task.getResult();
+                manager.launchReviewFlow(getActivity(), info).addOnCompleteListener(t -> replyReview(call, true));
+            });
+        } catch (Exception e) { replyReview(call, false); }
+    }
+
+    private void replyReview(PluginCall call, boolean asked) { JSObject ret = new JSObject(); ret.put("asked", asked); call.resolve(ret); }
 }

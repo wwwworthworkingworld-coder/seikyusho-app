@@ -8,6 +8,8 @@ const L = (item, qty, unit, price, rate = 10, extra = {}) => Object.assign({ ite
 const to = { to: "見本商事株式会社", honor: "御中", toZip: "000-0000", toAddr: "東京都見本区見本町 4-5-6", toDept: "総務部", toPerson: "見本 花子" };
 const seal = { type: "text", text: "株式会社サンプル工房", preset: "kaku-classic", noin: true };
 const docs = [
+  ["0_請求書", Object.assign({ kind: "請求書", no: "I-2026-003", date: "2026-11-20", due: "2026-12-31", subject: "Webサイト制作", wh: false,
+    lines: [L("トップページデザイン", 1, "式", 80000), L("下層ページ制作", 5, "ページ", 12000), L("早期割引", 1, "", 5000, 10, { discount: true })], memo: "いつもありがとうございます。" }, to)],
   ["1_見積書", Object.assign({ kind: "見積書", no: "Q-2026-001", date: "2026-11-20", due: "2026-12-20", subject: "Webサイト制作", wh: false,
     lines: [L("トップページデザイン", 1, "式", 80000), L("下層ページ制作", 5, "ページ", 12000), { type: "subtotal", item: "小計（制作）" }, L("撮影時の飲食（軽減税率）", 1, "式", 1500, 8), L("早期割引", 1, "", 5000, 10, { discount: true })], memo: "有効期限内のご発注で早期割引を適用します。" }, to)],
   ["2_納品書", Object.assign({ kind: "納品書", no: "D-2026-001", date: "2026-12-10", due: "", subject: "Webサイト制作", wh: false,

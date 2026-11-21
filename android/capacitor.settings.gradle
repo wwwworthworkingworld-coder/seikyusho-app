@@ -14,8 +14,6 @@ project(':capacitor-share').projectDir = new File('../node_modules/@capacitor/sh
 include ':seikyusho-pdf'
 project(':seikyusho-pdf').projectDir = new File('../plugins/seikyusho-pdf/android')
 
-include ':seikyusho-review'
-project(':seikyusho-review').projectDir = new File('../plugins/seikyusho-review/android')
 
 include ':seikyusho-store'
 project(':seikyusho-store').projectDir = new File('../plugins/seikyusho-store/android')

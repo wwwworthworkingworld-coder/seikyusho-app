@@ -9,6 +9,11 @@
 <body>
 <div class="app">
   <header class="bar"><h1 id="title">書類</h1><span class="bar-right" id="freeBadge" hidden></span></header>
+  <nav class="seg" aria-label="画面の切り替え">
+    <button type="button" data-tab="docs" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2h9l5 5v15H6z"/><path d="M15 2v5h5M9 13h6M9 17h6"/></svg>書類</button>
+    <button type="button" data-tab="edit"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>作る</button>
+    <button type="button" data-tab="settings"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>設定</button>
+  </nav>
 
   <main id="scroll">
     <!-- 書類（ホーム） -->
@@ -211,11 +216,11 @@
       </div>
 
       <div class="card links">
-        <h2>このアプリについて</h2>
-        <p class="note">書類はこのスマホの中だけに保存します。どこにも送信せず、クラウドにも保存しません。会員登録・広告・利用状況の収集はありません。消費税・源泉徴収の計算は国税庁の案内に沿った目安です。最終の確認は税務署・税理士へ。</p>
-        <button class="row-link" type="button" id="privacyBtn">プライバシーポリシー<span>›</span></button>
+        <h2>困ったとき</h2>
         <button class="row-link" type="button" id="supportBtn">お問い合わせ・使い方<span>›</span></button>
+        <button class="row-link" type="button" id="privacyBtn">プライバシーポリシー<span>›</span></button>
         <button class="row-link" type="button" id="reviewBtn">ストアでレビューを書く<span>›</span></button>
+        <p class="note">書類と取引先はこの端末に保存し、必要なときに「バックアップを書き出す」でファイルに残します。開発元のサーバーはなく、どこにも送信しません。消費税・源泉徴収の計算は国税庁の案内に沿った目安で、最終の確認は税務署・税理士へ。</p>
         <p class="note">提供：株式会社256　バージョン <span id="version">1.0.0</span></p>
       </div>
     </section>
@@ -230,11 +235,6 @@
   <!-- 書類：作るボタン -->
   <div class="fabbar" id="fabbar"><button class="primary" type="button" id="createBtn">＋ 作る</button></div>
 
-  <nav class="tabs" aria-label="画面の切り替え">
-    <button type="button" data-tab="docs" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2h9l5 5v15H6z"/><path d="M15 2v5h5M9 13h6M9 17h6"/></svg>書類</button>
-    <button type="button" data-tab="edit"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>作る</button>
-    <button type="button" data-tab="settings"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>設定</button>
-  </nav>
 </div>
 
 <!-- プレビュー（A4 を縮小） -->

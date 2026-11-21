@@ -2,8 +2,7 @@
   const C = window.SeikyushoCore, Paper = window.SeikyushoPaper;
   const KEY = "seikyusho-app-v1";
   const platform = window.Capacitor && window.Capacitor.getPlatform ? window.Capacitor.getPlatform() : "web";
-  // 課金の商品 ID は App Store と Google Play で別（Play は小文字とアンダースコア）
-  const PRODUCT_ID = platform === "android" ? "seikyusho_pro" : "com.company256.seikyusho.pro";
+  // 課金の商品は 1 つで、商品 ID はネイティブ側が持つ（iOS com.company256.seikyusho.pro／Android seikyusho_pro）
   const PRIVACY_URL = "https://256company.com/seikyusho-app-privacy.html";
   const SUPPORT_URL = "https://256company.com/seikyusho-app-support.html";
   const REVIEW_URL = platform === "android" ? "https://play.google.com/store/apps/details?id=com.company256.seikyusho" : "https://apps.apple.com/jp/app/id6835948237?action=write-review";
@@ -16,7 +15,7 @@
   const today = () => C.todayStr();
   const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-  const KIND_COLOR = { "見積書": "#5a7d9a", "納品書": "#6b8e5a", "請求書": "#3f51b5", "領収書": "#8b2942", "発注書": "#7a5a9a", "注文書": "#9a7a3a" };
+  const KIND_COLOR = { "見積書": "#5c7a8f", "納品書": "#5f8a5a", "請求書": "#1b5e4a", "領収書": "#8f3a3a", "発注書": "#6c5a8f", "注文書": "#9a7a3a" };
 
   // ---- 保存（アプリ専用の領域。この端末の中だけ）
   const EMPTY = () => ({ docs: [], trash: [], clients: [], items: [], me: { name: "", person: "", addr: "", tel: "", fax: "", mail: "", reg: "", taxable: true, bank: "" },
@@ -68,7 +67,7 @@
   const TITLES = { docs: "書類", edit: "作る", settings: "設定" };
   function showTab(name) {
     Object.keys(TITLES).forEach(k => { $("tab-" + k).hidden = k !== name; });
-    document.querySelectorAll(".tabs button").forEach(b => { if (b.dataset.tab === name) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current"); });
+    document.querySelectorAll(".seg button").forEach(b => { if (b.dataset.tab === name) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current"); });
     $("title").textContent = name === "edit" && cur ? (cur.kind + (cur.isNew ? "を作る" : "")) : TITLES[name];
     $("totalbar").hidden = name !== "edit";
     $("fabbar").hidden = name !== "docs";
@@ -78,7 +77,7 @@
     if (name === "edit") { if (!cur) newDoc("請求書"); else renderEdit(); }
     renderBadge();
   }
-  document.querySelectorAll(".tabs button").forEach(b => { b.onclick = () => showTab(b.dataset.tab); });
+  document.querySelectorAll(".seg button").forEach(b => { b.onclick = () => showTab(b.dataset.tab); });
 
   function chips(el, list, selected, onPick, extra) {
     el.innerHTML = "";
@@ -693,9 +692,9 @@
   async function checkPurchased() {
     try {
       if (!store()) { bought = !native; refreshPro(); renderBadge(); return; }   // パソコンのブラウザーでは購入済みとして動かす
-      const r = await store().isPurchased({ productId: PRODUCT_ID });
-      bought = !!r.purchased;
-      if (!bought) { const p = await store().getProduct({ productId: PRODUCT_ID }); if (p && p.price) priceText = p.price; }
+      const r = await store().status();
+      bought = !!r.unlocked;
+      if (!bought) { const o = await store().loadOffer(); if (o && o.price) priceText = o.price; }
     } catch (e) { bought = false; }
     refreshPro(); renderBadge(); renderBuy();
   }
@@ -703,16 +702,16 @@
     if (!store()) { toast("この環境では購入できません"); return; }
     $("buyBtn").disabled = $("payBuy").disabled = true;
     try {
-      const r = await store().purchase({ productId: PRODUCT_ID });
-      if (r.state === "purchased") { bought = true; refreshPro(); closePay(); toast("ありがとうございます。無制限・印影・テンプレが使えます"); }
-      else if (r.state === "pending") toast("承認待ちです。承認されると使えるようになります");
+      const r = await store().buy();
+      if (r.result === "done") { bought = true; refreshPro(); closePay(); toast("ありがとうございます。無制限・印影・テンプレが使えます"); }
+      else if (r.result === "waiting") toast("承認待ちです。承認されると使えるようになります");
     } catch (e) { toast("購入できませんでした"); }
     $("buyBtn").disabled = $("payBuy").disabled = false;
     renderBadge(); renderBuy(); if (!$("tab-settings").hidden) renderSettings(); if (previewing) renderPreview();
   }
   async function restorePurchase() {
     if (!store()) return;
-    try { const r = await store().restore({ productId: PRODUCT_ID }); bought = !!r.purchased; refreshPro(); toast(bought ? "購入を復元しました" : (platform === "android" ? "この Google アカウントでの購入は見つかりませんでした" : "この Apple アカウントでの購入は見つかりませんでした")); if (bought) closePay(); }
+    try { const r = await store().recover(); bought = !!r.unlocked; refreshPro(); toast(bought ? "購入を復元しました" : (platform === "android" ? "この Google アカウントでの購入は見つかりませんでした" : "この Apple アカウントでの購入は見つかりませんでした")); if (bought) closePay(); }
     catch (e) { toast("復元できませんでした"); }
     renderBadge(); renderBuy(); if (!$("tab-settings").hidden) renderSettings();
   }
@@ -745,10 +744,10 @@
 
   // ---- レビューのお願い（ストア標準のダイアログ。出すかどうかはストアが決める）
   async function maybeAskReview(exported) {
-    if (!native || !P.SeikyushoReview) return;
+    if (!native || !P.SeikyushoPdf || !P.SeikyushoPdf.requestReview) return;
     if (!C.shouldAskReview({ asked: data.settings.reviewAsked, launches: data.settings.launches, docs: data.docs.length, exported })) return;
     data.settings.reviewAsked = true; await save(true);
-    setTimeout(() => { try { P.SeikyushoReview.request(); } catch (e) { /* 出なくても何もしない */ } }, exported ? 1500 : 2000);
+    setTimeout(() => { try { P.SeikyushoPdf.requestReview(); } catch (e) { /* 出なくても何もしない */ } }, exported ? 1500 : 2000);
   }
   $("reviewBtn").onclick = () => window.open(REVIEW_URL, "_blank");
   $("privacyBtn").onclick = () => window.open(PRIVACY_URL, "_blank");
